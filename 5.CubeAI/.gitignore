@@ -1,0 +1,7 @@
+﻿# Keil MDK-ARM build output directories (project-specific)
+MDK-ARM/GPIO/
+MDK-ARM/_GPIO/
+MDK-ARM/RTE/
+Objects/
+Listings/
+DebugConfig/
