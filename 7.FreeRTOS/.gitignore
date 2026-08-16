@@ -1,0 +1,14 @@
+# Keil MDK-ARM 编译输出目录（OutputDirectory 均为 MDK-ARM/FreeRTOS/）
+*/MDK-ARM/FreeRTOS/
+*/MDK-ARM/_FreeRTOS/
+*/MDK-ARM/RTE/
+*/MDK-ARM/DebugConfig/
+
+# Keil 用户界面配置文件（带机器用户名，不上传）
+*.uvguix.*
+
+# 本地笔记（含本机绝对路径）
+RTOS调试文件路径.txt
+
+# 命令行编译输出日志
+build_out.txt
