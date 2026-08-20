@@ -4,3 +4,24 @@
 
 # 手势识别训练数据（28MB 大二进制，不入库；本地文件保留）
 6.Thermal-gesture/python_codes/camera_data/
+
+# Keil MDK 编译产物（任意目录层级）
+**/MDK-ARM/FreeRTOS/
+**/MDK-ARM/DebugConfig/
+**/MDK-ARM/RTE/
+*.o
+*.crf
+*.d
+*.axf
+*.map
+*.dep
+*.lst
+*.lnp
+*.hex
+*.htm
+*.bak
+*.bak-*
+build_log*.txt
+
+# 编辑器配置
+.vscode/
