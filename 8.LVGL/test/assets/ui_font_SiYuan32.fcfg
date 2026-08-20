@@ -1,0 +1,16 @@
+{
+  "codename": "SiYuan32",
+  "ttf_path": "/assets/SourceHanSansSC-Regular-2.otf",
+  "bin_path": "/assets\\ui_font_SiYuan32.bin",
+  "c_path": "/assets\\ui_font_SiYuan32.c",
+  "cfg_path": "/assets\\ui_font_SiYuan32.fcfg",
+  "size": 32,
+  "bpp": 4,
+  "letters": 0,
+  "ranges": [
+    "0x20-0x7f"
+  ],
+  "symbols": "这里是测试中文字体",
+  "customparams": "--no-compress --no-prefilter",
+  "uploaded": false
+}
