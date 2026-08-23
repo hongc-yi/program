@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OV Watch Anime UI Preview</title>
+<style>
+:root {
+  --ink: #100b21;
+  --screen: #17102d;
+  --violet: #9b6cff;
+  --pink: #ff73b9;
+  --cyan: #83f4e1;
+  --gold: #ffd27a;
+  --white: #fff9ff;
+  --muted: #d4c6ec;
+  --panel: #211440dd;
+  --line: #b394ff77;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; }
+body {
+  padding: 32px 20px;
+  color: var(--white);
+  font-family: Arial, Helvetica, sans-serif;
+  background: #07050d;
+}
+.shell { width: min(940px, 100%); margin: 0 auto; display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 36px; align-items: start; }
+.preview-column { display: grid; justify-items: center; }
+.watch-frame { width: 288px; height: 336px; padding: 28px 24px; border-radius: 44px; background: #05030a; box-shadow: 0 26px 70px #000b, inset 0 0 0 1px #392657; }
+.watch-screen { position: relative; width: 240px; height: 280px; overflow: hidden; border-radius: 34px; background: var(--screen); border: 1px solid #9f7de255; user-select: none; touch-action: none; }
+.page { position: absolute; inset: 0; display: none; overflow: hidden; background: var(--screen); }
+.page.active { display: block; }
+.art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: .62; filter: saturate(1.2) contrast(1.04); }
+.art-shade { position: absolute; inset: 0; background: linear-gradient(180deg, #120b29bb 0%, #170f2dcc 43%, #10091fe8 100%); }
+.page::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(165deg, transparent 0 32px, #ffffff08 33px 34px); mix-blend-mode: screen; }
+.label { position: absolute; z-index: 2; white-space: nowrap; line-height: 1; }
+.brand { left: 16px; top: 14px; color: var(--white); font-size: 13px; font-weight: 900; letter-spacing: 1px; text-shadow: 2px 2px 0 #5b2c90; }
+.live { right: 16px; top: 14px; color: var(--cyan); font-size: 11px; font-weight: 900; letter-spacing: 1px; }
+.live::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 5px 1px 0; border-radius: 50%; background: var(--pink); box-shadow: 0 0 9px var(--pink); }
+.rune { left: 15px; top: 47px; color: #f5b6f4; font-size: 9px; font-weight: 900; letter-spacing: 2px; transform: rotate(-7deg); }
+.time { top: 66px; left: 0; right: 0; z-index: 2; color: var(--white); text-align: center; font-size: 43px; font-weight: 900; letter-spacing: 2px; text-shadow: 3px 3px 0 #632d93, 0 0 14px #ff7ec477; }
+.date { top: 111px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 11px; font-weight: 800; letter-spacing: 2px; }
+.hero-tag { right: -24px; top: 95px; z-index: 2; padding: 5px 28px; color: var(--ink); background: var(--gold); font-size: 9px; font-weight: 900; letter-spacing: 1px; transform: rotate(8deg); }
+.diagonal { position: absolute; z-index: 2; left: 15px; right: 15px; top: 132px; height: 2px; background: linear-gradient(90deg, var(--pink), transparent); transform: skewX(-24deg); }
+.stat { position: absolute; z-index: 2; top: 148px; width: 96px; height: 56px; padding: 9px 10px; border: 1px solid #f7c4ff66; border-radius: 13px 5px 13px 5px; background: #251445aa; box-shadow: inset 0 0 18px #ff7cc51a; }
+.stat-left { left: 14px; }
+.stat-right { right: 14px; }
+.stat-label { display: block; color: var(--cyan); font-size: 9px; font-weight: 900; letter-spacing: 1px; }
+.stat-value { display: block; margin-top: 7px; color: var(--white); font-size: 18px; font-weight: 900; }
+.stat-value small { color: var(--gold); font-size: 9px; }
+.status-line { top: 216px; left: 0; right: 0; color: var(--white); text-align: center; font-size: 11px; font-weight: 900; letter-spacing: 1px; text-shadow: 1px 1px 0 #562a83; }
+.detail-line { top: 233px; left: 0; right: 0; color: #d5bdf3; text-align: center; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+.action { position: absolute; z-index: 3; top: 250px; width: 96px; height: 28px; border: 1px solid #ff9bdcaa; border-radius: 10px 3px 10px 3px; background: #341652cc; color: var(--white); font-size: 11px; font-weight: 900; letter-spacing: 1px; cursor: pointer; }
+.action:hover, .action:active, .tile:active { background: #713a8dcc; }
+.apps-action { left: 14px; }
+.ai-action { right: 14px; }
+.panel { position: absolute; z-index: 8; left: 0; top: 0; width: 240px; height: 170px; border: 1px solid #ff9bdc99; border-radius: 0 0 24px 24px; background: linear-gradient(135deg, #251343f5, #100b26f5); transform: translateY(-170px); transition: transform .2s ease-out; box-shadow: 0 14px 30px #0007; }
+.panel.open { transform: translateY(0); }
+.panel-title { left: 15px; top: 12px; color: var(--white); font-size: 16px; font-weight: 900; letter-spacing: 1px; }
+.panel-title::after { content: " / SETTINGS"; color: var(--pink); font-size: 9px; }
+.panel-close { position: absolute; z-index: 2; right: 15px; top: 10px; width: 32px; height: 26px; border: 1px solid #ff9bdc99; border-radius: 9px 3px 9px 3px; background: #341652; color: var(--white); font-weight: 900; cursor: pointer; }
+.brightness-caption { left: 84px; top: 42px; color: var(--cyan); font-size: 11px; font-weight: 900; letter-spacing: 1px; }
+.capsule { position: absolute; left: 18px; top: 40px; width: 48px; height: 96px; overflow: hidden; border: 1px solid #ff9bdcaa; border-radius: 999px; background: #2a164a; cursor: ns-resize; touch-action: none; box-shadow: inset 0 0 12px #0008; }
+.capsule::before { content: ""; position: absolute; inset: 4px; border: 1px solid #ffffff20; border-radius: inherit; z-index: 2; pointer-events: none; }
+.capsule-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 20%; border-radius: inherit; background: linear-gradient(180deg, var(--pink), var(--violet)); box-shadow: 0 -5px 18px #ff78c988; transition: height .08s linear; }
+.sun { position: absolute; z-index: 3; left: 30px; top: 106px; width: 24px; height: 24px; color: var(--gold); font-size: 22px; line-height: 24px; text-align: center; text-shadow: 0 0 8px #ffd27a99; }
+.brightness-value { left: 84px; top: 65px; color: var(--white); font-size: 20px; font-weight: 900; text-shadow: 2px 2px 0 #632d93; }
+.quick-buttons { position: absolute; left: 82px; top: 108px; display: flex; gap: 4px; }
+.quick-buttons button { width: 46px; height: 28px; border: 1px solid #ff9bdc99; border-radius: 9px 3px 9px 3px; background: #341652; color: var(--white); font-size: 8px; font-weight: 900; cursor: pointer; }
+.page-back { position: absolute; z-index: 3; left: 14px; top: 14px; width: 34px; height: 28px; border: 1px solid #ff9bdc99; border-radius: 9px 3px 9px 3px; background: #341652; color: var(--white); font-weight: 900; cursor: pointer; }
+.page-heading { top: 18px; left: 0; right: 0; color: var(--white); text-align: center; font-size: 19px; font-weight: 900; letter-spacing: 1px; text-shadow: 2px 2px 0 #632d93; }
+.page-subheading { top: 48px; left: 0; right: 0; color: var(--cyan); text-align: center; font-size: 10px; font-weight: 900; letter-spacing: 2px; }
+.tiles { position: absolute; z-index: 2; top: 78px; left: 14px; display: grid; grid-template-columns: 96px 96px; gap: 10px 20px; }
+.tile { height: 42px; border: 1px solid #ff9bdc99; border-radius: 12px 4px 12px 4px; background: #2b174dcc; color: var(--white); font-size: 12px; font-weight: 900; letter-spacing: 1px; cursor: pointer; }
+.app-message { top: 200px; left: 0; right: 0; color: var(--white); text-align: center; font-size: 10px; font-weight: 900; letter-spacing: .5px; }
+.app-note { top: 224px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 9px; font-weight: 800; }
+.settings-page .brightness-caption { left: 0; right: 0; top: 52px; text-align: center; }
+.settings-page .capsule { left: 98px; top: 70px; width: 44px; height: 106px; }
+.settings-page .sun { left: 108px; top: 140px; }
+.settings-page .brightness-value { top: 182px; left: 0; right: 0; text-align: center; }
+.settings-note { top: 204px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 10px; font-weight: 900; }
+.settings-hardware { top: 230px; left: 0; right: 0; color: #b994e4; text-align: center; font-size: 9px; font-weight: 800; }
+.state-page .state-kicker { top: 54px; left: 0; right: 0; color: var(--cyan); text-align: center; font-size: 10px; font-weight: 900; letter-spacing: 2px; }
+.state-page .state-title { top: 76px; left: 18px; right: 18px; color: var(--white); text-align: center; font-size: 20px; font-weight: 900; text-shadow: 2px 2px 0 #632d93; }
+.state-page .state-copy { top: 116px; left: 24px; right: 24px; padding: 10px; border: 1px solid #ff9bdc88; border-radius: 12px 4px 12px 4px; background: #23143dcc; color: var(--muted); text-align: center; font-size: 10px; font-weight: 800; line-height: 1.4; }
+.state-page .state-action { position: absolute; z-index: 3; top: 190px; left: 54px; width: 132px; height: 34px; border: 1px solid #83f4e1aa; border-radius: 11px 4px 11px 4px; background: #203e52dd; color: var(--white); font-size: 10px; font-weight: 900; letter-spacing: 1px; cursor: pointer; }
+.state-page .state-footer { top: 240px; left: 0; right: 0; color: #d5bdf3; text-align: center; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+.side h1 { margin: 0 0 8px; font-size: 26px; }
+.lead { margin: 0 0 24px; color: #bbaed3; line-height: 1.55; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.toolbar button { border: 1px solid #633a89; border-radius: 8px 3px 8px 3px; background: #170e2b; color: var(--white); padding: 10px 13px; cursor: pointer; }
+.toolbar button.active, .toolbar button:hover { border-color: var(--pink); color: var(--pink); }
+.info { padding: 16px; border-left: 2px solid var(--pink); background: #170e2baa; color: #bbaed3; line-height: 1.6; }
+.info strong { color: var(--white); }
+.legend { margin-top: 18px; color: #806a9e; font-size: 12px; line-height: 1.6; }
+@media (max-width: 720px) { body { padding: 20px 12px; } .shell { grid-template-columns: 1fr; gap: 28px; } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="preview-column">
+    <div class="watch-frame">
+      <div class="watch-screen" id="watchScreen">
+        <section class="page active" id="homePage">
+          <img class="art" src="file:///D:/图片/动漫/败犬女主/微信图片_20240826004733.png" alt="anime reference">
+          <div class="art-shade"></div>
+          <span class="label brand">OV // WATCH</span>
+          <span class="label live">LIVE</span>
+          <span class="label rune">WATCH STATUS / DEMO</span>
+          <span class="label time">09:41</span>
+          <span class="label date">FRI 21 AUG  /  24 C</span>
+          <span class="label hero-tag"></span>
+          <i class="diagonal"></i>
+          <div class="stat stat-left"><span class="stat-label">STEP QUEST</span><span class="stat-value">4.2K <small>+76%</small></span></div>
+          <div class="stat stat-right"><span class="stat-label">AHT21</span><span class="stat-value">24° <small>48%</small></span></div>
+          <span class="label status-line" id="homeStatus">READY / TOUCH</span>
+          <span class="label detail-line">DEMO DATA / PLACEHOLDER</span>
+          <button class="action apps-action" data-page="apps">APPS</button>
+          <button class="action ai-action" data-page="ai">AI</button>
+          <div class="panel" id="quickPanel">
+            <span class="label panel-title">QUICK PANEL</span>
+            <button class="panel-close" id="closePanel">^</button>
+            <span class="label brightness-caption">BRIGHTNESS</span>
+            <div class="capsule" data-brightness><div class="capsule-fill"></div></div>
+            <span class="sun">☼</span>
+            <span class="brightness-value" data-brightness-value>20%</span>
+            <div class="quick-buttons"><button data-brightness-set="15">NIGHT</button><button data-brightness-set="50">DAY</button><button data-lock>LOCK</button></div>
+          </div>
+        </section>
+        <section class="page" id="appsPage">
+          <img class="art" src="file:///D:/图片/动漫/败犬女主/微信图片_20240918161449.png" alt="anime reference">
+          <div class="art-shade"></div>
+          <button class="page-back" data-page="home">&lt;</button>
+          <span class="label page-heading">APPS</span>
+          <span class="label page-subheading">WATCH MODULES / 04</span>
+          <div class="tiles"><button class="tile" data-app-message="ENV / AHT21 PLACEHOLDER">ENV</button><button class="tile" data-page="ai">AI</button><button class="tile" data-app-message="RTC / SETUP MODULE NEXT">RTC</button><button class="tile" data-page="settings">SET</button></div>
+          <span class="label app-message" id="appMessage">CHOOSE A MODULE</span>
+          <span class="label app-note">MODULES ARE PLACEHOLDERS</span>
+        </section>
+        <section class="page state-page" id="aiPage">
+          <img class="art" src="file:///D:/图片/动漫/败犬女主/微信图片_202410042154392.jpg" alt="anime reference">
+          <div class="art-shade"></div>
+          <button class="page-back" data-page="apps">&lt;</button>
+          <span class="label page-heading">AI LINK</span>
+          <span class="label state-kicker">LISTENING / ESP32</span>
+          <span class="label state-title">I'M HERE</span>
+          <span class="label state-copy">VOICE CHANNEL IS READY.<br>ASK SOMETHING WHEN YOU ARE READY.</span>
+          <button class="state-action" id="aiAction">HOLD TO TALK</button>
+          <span class="label state-footer">DEMO / ESP32 NOT CONNECTED</span>
+        </section>
+        <section class="page state-page" id="alertPage">
+          <img class="art" src="file:///D:/图片/动漫/败犬女主/QQ图片20240812161930.png" alt="anime reference">
+          <div class="art-shade"></div>
+          <button class="page-back" data-page="home">&lt;</button>
+          <span class="label page-heading">NOTICE</span>
+          <span class="label state-kicker">MOOD / ALERT</span>
+          <span class="label state-title">HEY, LOOK HERE</span>
+          <span class="label state-copy">A NEW MESSAGE OR REMINDER<br>WILL APPEAR IN THIS SPACE.</span>
+          <button class="state-action" id="alertAction">DISMISS</button>
+          <span class="label state-footer">DEMO / NOTIFICATION PLACEHOLDER</span>
+        </section>
+        <section class="page settings-page" id="settingsPage">
+          <div class="art-shade"></div>
+          <button class="page-back" data-page="apps">&lt;</button>
+          <span class="label page-heading">SETTINGS</span>
+          <span class="label brightness-caption">BRIGHTNESS</span>
+          <div class="capsule" data-brightness><div class="capsule-fill"></div></div>
+          <span class="sun">☼</span>
+          <span class="label brightness-value" data-brightness-value>20%</span>
+          <span class="label settings-note">DISPLAY BRIGHTNESS</span>
+          <span class="label settings-hardware">PWM / PA15 / TIM2 CH1</span>
+        </section>
+      </div>
+    </div>
+  </div>
+  <aside class="side">
+    <h1>OV Watch / Anime Skin</h1>
+    <p class="lead">A visual-only 240 x 280 concept using the clean blue-haired character close-up and a second scene from the BAIKEN heroine folder, with cyan status accents, gold tags, dark outlines, and diagonal sticker-like labels.</p>
+    <div class="toolbar" id="toolbar"><button class="active" data-page="home">Home</button><button data-page="apps">Apps</button><button data-page="ai">AI</button><button data-page="alert">Notice</button><button data-page="settings">Settings</button><button id="toggleQuick">Quick Panel</button></div>
+    <div class="info"><strong>Theme direction</strong><br>Four reference images from D:\图片\动漫\败犬女主 are used in this browser preview: one for the home face, one for AI conversation, one for AI waiting, and one for notification mood. The future LVGL skin can preserve the blue-haired character palette without placing large source images in firmware.</div>
+    <div class="legend">Interaction: click APPS / AI / SET, drag the capsule vertically, or drag from the top edge of the watch screen to open the quick panel. This file does not modify the STM32 firmware.</div>
+  </aside>
+</div>
+<script>
+(function () {
+  const pages = { home: document.getElementById('homePage'), apps: document.getElementById('appsPage'), ai: document.getElementById('aiPage'), alert: document.getElementById('alertPage'), settings: document.getElementById('settingsPage') };
+  const toolbarButtons = Array.from(document.querySelectorAll('#toolbar button[data-page]'));
+  const screen = document.getElementById('watchScreen');
+  const panel = document.getElementById('quickPanel');
+  const capsules = Array.from(document.querySelectorAll('[data-brightness]'));
+  const values = Array.from(document.querySelectorAll('[data-brightness-value]'));
+  let brightness = 20;
+  let dragging = false;
+  let startY = null;
+  function showPage(name) { Object.keys(pages).forEach(key => pages[key].classList.toggle('active', key === name)); toolbarButtons.forEach(button => button.classList.toggle('active', button.dataset.page === name)); panel.classList.remove('open'); }
+  function setBrightness(value) { brightness = Math.max(5, Math.min(100, Math.round(value))); capsules.forEach(capsule => capsule.querySelector('.capsule-fill').style.height = brightness + '%'); values.forEach(valueLabel => valueLabel.textContent = brightness + '%'); }
+  function panelOpen(open) { panel.classList.toggle('open', open === undefined ? !panel.classList.contains('open') : open); }
+  function brightnessFromPointer(event, capsule) { const rect = capsule.getBoundingClientRect(); setBrightness(5 + (1 - ((event.clientY - rect.top) / rect.height)) * 95); }
+  toolbarButtons.forEach(button => button.addEventListener('click', () => showPage(button.dataset.page)));
+  document.querySelectorAll('[data-page]').forEach(button => { if (!button.closest('#toolbar')) button.addEventListener('click', () => showPage(button.dataset.page)); });
+  document.getElementById('toggleQuick').addEventListener('click', () => { showPage('home'); panelOpen(); });
+  document.getElementById('closePanel').addEventListener('click', () => panelOpen(false));
+  document.querySelectorAll('[data-brightness-set]').forEach(button => button.addEventListener('click', () => setBrightness(button.dataset.brightnessSet)));
+  document.querySelectorAll('[data-lock]').forEach(button => button.addEventListener('click', () => { document.getElementById('homeStatus').textContent = 'LOCK / PLACEHOLDER'; }));
+  document.querySelectorAll('[data-app-message]').forEach(button => button.addEventListener('click', () => { document.getElementById('appMessage').textContent = button.dataset.appMessage; }));
+  document.getElementById('aiAction').addEventListener('click', () => { document.querySelector('#aiPage .state-title').textContent = 'LISTENING...'; });
+  document.getElementById('alertAction').addEventListener('click', () => { document.querySelector('#alertPage .state-title').textContent = 'ALL CLEAR'; });
+  capsules.forEach(capsule => { capsule.addEventListener('pointerdown', event => { dragging = true; capsule.setPointerCapture(event.pointerId); brightnessFromPointer(event, capsule); }); capsule.addEventListener('pointermove', event => { if (dragging) brightnessFromPointer(event, capsule); }); capsule.addEventListener('pointerup', () => { dragging = false; }); capsule.addEventListener('pointercancel', () => { dragging = false; }); });
+  screen.addEventListener('pointerdown', event => { startY = event.clientY; });
+  screen.addEventListener('pointerup', event => { if (startY !== null && event.clientY - startY > 28 && startY < 90 && pages.home.classList.contains('active')) panelOpen(true); if (startY !== null && event.clientY - startY < -28 && panel.classList.contains('open')) panelOpen(false); startY = null; });
+  setBrightness(brightness);
+}());
+</script>
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OV Watch UI Preview</title>
+<style>
+:root {
+  --bg: #050b10;
+  --screen: #071018;
+  --panel: #0b1823;
+  --card: #0d1b27;
+  --line: #24485b;
+  --muted: #8ca6b5;
+  --faint: #506877;
+  --text: #f4fbff;
+  --mint: #79e4c5;
+  --mint-dark: #132a35;
+  --amber: #ffd166;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; }
+body {
+  background: radial-gradient(circle at 50% 10%, #132532 0, var(--bg) 48%, #020507 100%);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
+  padding: 32px 20px;
+}
+.shell {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 34px;
+  align-items: start;
+}
+.preview-column { display: grid; justify-items: center; gap: 18px; }
+.watch-frame {
+  width: 288px;
+  height: 336px;
+  padding: 28px 24px;
+  border-radius: 44px;
+  background: #03070a;
+  box-shadow: 0 24px 70px #000b, inset 0 0 0 1px #1d303b;
+}
+.watch-screen {
+  position: relative;
+  width: 240px;
+  height: 280px;
+  overflow: hidden;
+  border-radius: 34px;
+  background: var(--screen);
+  border: 1px solid #1e3946;
+  box-shadow: inset 0 0 30px #0008;
+  user-select: none;
+  touch-action: none;
+}
+.page { position: absolute; inset: 0; display: none; background: var(--screen); }
+.page.active { display: block; }
+.label { position: absolute; white-space: nowrap; line-height: 1; }
+.title { left: 18px; top: 14px; color: #d7f7ff; font-size: 14px; font-weight: 700; }
+.status { right: 18px; top: 14px; color: var(--mint); font-size: 14px; font-weight: 700; }
+.divider { position: absolute; left: 18px; top: 40px; width: 204px; height: 1px; background: #19303d; }
+.kicker { top: 55px; left: 0; right: 0; text-align: center; color: var(--mint); font-size: 14px; font-weight: 700; }
+.time { top: 72px; left: 0; right: 0; text-align: center; color: var(--text); font-size: 42px; font-weight: 700; letter-spacing: 1px; }
+.date { top: 116px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 14px; font-weight: 700; }
+.card {
+  position: absolute;
+  top: 145px;
+  height: 68px;
+  border: 1px solid #1d3544;
+  border-radius: 12px;
+  background: var(--card);
+}
+.steps-card { left: 14px; width: 102px; }
+.env-card { left: 124px; width: 102px; }
+.card-title { left: 10px; top: 9px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.card-value { left: 10px; top: 29px; color: var(--text); font-size: 20px; font-weight: 700; }
+.card-sub { left: 10px; top: 51px; color: var(--mint); font-size: 11px; font-weight: 700; }
+.progress { position: absolute; left: 10px; bottom: 8px; width: 82px; height: 5px; overflow: hidden; border-radius: 8px; background: #1a303d; }
+.progress i { display: block; width: 76%; height: 100%; border-radius: inherit; background: var(--mint); }
+.status-line { top: 218px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 13px; font-weight: 700; }
+.detail-line { top: 236px; left: 0; right: 0; color: var(--faint); text-align: center; font-size: 11px; font-weight: 700; }
+.action {
+  position: absolute;
+  top: 250px;
+  width: 100px;
+  height: 28px;
+  border: 1px solid #24485b;
+  border-radius: 10px;
+  background: #102535;
+  color: #d7f7ff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.action:active, .tile:active { background: #1a4054; }
+.apps-action { left: 14px; }
+.ai-action { right: 14px; }
+.panel {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  top: 0;
+  width: 240px;
+  height: 170px;
+  padding: 0;
+  border: 1px solid #24485b;
+  border-radius: 0 0 22px 22px;
+  background: var(--panel);
+  transform: translateY(-170px);
+  transition: transform .18s ease-out;
+}
+.panel.open { transform: translateY(0); }
+.panel-title { left: 16px; top: 12px; color: var(--text); font-size: 18px; font-weight: 700; }
+.panel-close { position: absolute; top: 10px; right: 16px; width: 34px; height: 26px; border: 1px solid #24485b; border-radius: 9px; background: #102535; color: var(--text); font-weight: 700; cursor: pointer; }
+.brightness-caption { left: 84px; top: 43px; color: var(--mint); font-size: 13px; font-weight: 700; }
+.capsule {
+  position: absolute;
+  width: 48px;
+  height: 96px;
+  left: 18px;
+  top: 40px;
+  overflow: hidden;
+  border: 1px solid #2b5360;
+  border-radius: 999px;
+  background: var(--mint-dark);
+  cursor: ns-resize;
+  touch-action: none;
+}
+.capsule-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 20%; border-radius: inherit; background: var(--mint); transition: height .08s linear; }
+.sun { position: absolute; left: 30px; top: 106px; width: 24px; height: 24px; color: var(--text); font-size: 22px; line-height: 24px; text-align: center; }
+.brightness-value { position: absolute; left: 84px; top: 66px; color: var(--text); font-size: 20px; font-weight: 700; }
+.quick-buttons { position: absolute; left: 82px; top: 108px; display: flex; gap: 4px; }
+.quick-buttons button { width: 46px; height: 28px; border: 1px solid #24485b; border-radius: 9px; background: #102535; color: #d7f7ff; font-size: 9px; font-weight: 700; cursor: pointer; }
+.app-page, .settings-page { padding: 0; }
+.page-back { position: absolute; left: 14px; top: 14px; width: 36px; height: 28px; border: 1px solid #24485b; border-radius: 9px; background: #102535; color: var(--text); font-weight: 700; cursor: pointer; }
+.page-heading { top: 18px; left: 0; right: 0; text-align: center; color: var(--text); font-size: 18px; font-weight: 700; }
+.page-subheading { top: 48px; left: 0; right: 0; text-align: center; color: var(--mint); font-size: 12px; font-weight: 700; }
+.tiles { position: absolute; top: 78px; left: 14px; display: grid; grid-template-columns: 96px 96px; gap: 10px 20px; }
+.tile { height: 42px; border: 1px solid #24485b; border-radius: 10px; background: #102535; color: #d7f7ff; font-size: 13px; font-weight: 700; cursor: pointer; }
+.app-message { position: absolute; top: 200px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 12px; font-weight: 700; }
+.app-note { position: absolute; top: 224px; left: 0; right: 0; color: var(--faint); text-align: center; font-size: 10px; font-weight: 700; }
+.settings-page .brightness-caption { left: 0; right: 0; top: 52px; text-align: center; }
+.settings-page .capsule { left: 98px; top: 70px; width: 44px; height: 106px; }
+.settings-page .sun { left: 108px; top: 140px; }
+.settings-page .brightness-value { top: 182px; left: 0; right: 0; text-align: center; }
+.settings-note { position: absolute; top: 204px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 11px; font-weight: 700; }
+.settings-hardware { position: absolute; top: 230px; left: 0; right: 0; color: var(--faint); text-align: center; font-size: 10px; font-weight: 700; }
+.side { max-width: 520px; }
+h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: .2px; }
+.lead { margin: 0 0 24px; color: var(--muted); line-height: 1.5; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.toolbar button { border: 1px solid #294958; border-radius: 8px; background: #0d1b27; color: var(--text); padding: 10px 13px; cursor: pointer; }
+.toolbar button.active, .toolbar button:hover { border-color: var(--mint); color: var(--mint); }
+.info { padding: 16px; border-left: 2px solid var(--mint); background: #0b1823aa; color: var(--muted); line-height: 1.55; }
+.info strong { color: var(--text); }
+.legend { margin-top: 18px; color: var(--faint); font-size: 12px; line-height: 1.6; }
+@media (max-width: 720px) {
+  body { padding: 20px 12px; }
+  .shell { grid-template-columns: 1fr; gap: 26px; }
+  .side { max-width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="preview-column">
+    <div class="watch-frame">
+      <div class="watch-screen" id="watchScreen">
+        <section class="page active" id="homePage">
+          <span class="label title">OV / WATCH</span>
+          <span class="label status">USB / OK</span>
+          <i class="divider"></i>
+          <span class="label kicker">DAILY FOCUS</span>
+          <span class="label time">09:41</span>
+          <span class="label date">FRI / 21 AUG</span>
+          <div class="card steps-card"><span class="label card-title">STEPS</span><span class="label card-value">4,268</span><i class="progress"><i></i></i></div>
+          <div class="card env-card"><span class="label card-title">AHT21</span><span class="label card-value">24.0 C</span><span class="label card-sub">48 %</span></div>
+          <span class="label status-line" id="homeStatus">READY / TOUCH</span>
+          <span class="label detail-line">DEMO / DATA PLACEHOLDER</span>
+          <button class="action apps-action" data-page="apps">APPS</button>
+          <button class="action ai-action" data-page="apps">AI</button>
+          <div class="panel" id="quickPanel">
+            <span class="label panel-title">QUICK PANEL</span>
+            <button class="panel-close" id="closePanel">^</button>
+            <span class="label brightness-caption">BRIGHTNESS</span>
+            <div class="capsule" data-brightness><div class="capsule-fill"></div></div>
+            <span class="sun">☼</span>
+            <span class="brightness-value" data-brightness-value>20%</span>
+            <div class="quick-buttons"><button data-brightness-set="15">NIGHT</button><button data-brightness-set="50">DAY</button><button data-lock>LOCK</button></div>
+          </div>
+        </section>
+        <section class="page app-page" id="appsPage">
+          <button class="page-back" data-page="home">&lt;</button>
+          <span class="label page-heading">APPS</span>
+          <span class="label page-subheading">WATCH FRAMEWORK</span>
+          <div class="tiles"><button class="tile" data-app-message="ENV / AHT21 PLACEHOLDER">ENV</button><button class="tile" data-app-message="AI / ESP32 LINK NEXT">AI</button><button class="tile" data-app-message="RTC / SETUP MODULE NEXT">RTC</button><button class="tile" data-page="settings">SET</button></div>
+          <span class="app-message" id="appMessage">TOUCH A TILE TO TEST</span>
+          <span class="app-note">MODULES ARE PLACEHOLDERS</span>
+        </section>
+        <section class="page settings-page" id="settingsPage">
+          <button class="page-back" data-page="apps">&lt;</button>
+          <span class="label page-heading">SETTINGS</span>
+          <span class="label brightness-caption">BRIGHTNESS</span>
+          <div class="capsule" data-brightness><div class="capsule-fill"></div></div>
+          <span class="sun">☼</span>
+          <span class="brightness-value" data-brightness-value>20%</span>
+          <span class="settings-note">DISPLAY BRIGHTNESS</span>
+          <span class="settings-hardware">PWM / PA15 / TIM2 CH1</span>
+        </section>
+      </div>
+    </div>
+  </div>
+  <aside class="side">
+    <h1>OV Watch UI Preview</h1>
+    <p class="lead">A 240 x 280 visual preview for the current LVGL screen structure. Change pages here before changing firmware.</p>
+    <div class="toolbar" id="toolbar">
+      <button class="active" data-page="home">Home</button>
+      <button data-page="apps">Apps</button>
+      <button data-page="settings">Settings</button>
+      <button id="toggleQuick">Quick Panel</button>
+    </div>
+    <div class="info"><strong>Current design</strong><br>Dark watch face, two data cards, a top-down quick panel, and a phone-style capsule brightness control.</div>
+    <div class="legend">Interaction: use the toolbar, click APPS / AI / SET, drag the capsule vertically, or drag from the top edge of the watch screen to preview the quick panel.</div>
+  </aside>
+</div>
+<script>
+(function () {
+  const pages = { home: document.getElementById('homePage'), apps: document.getElementById('appsPage'), settings: document.getElementById('settingsPage') };
+  const toolbarButtons = Array.from(document.querySelectorAll('#toolbar button[data-page]'));
+  const screen = document.getElementById('watchScreen');
+  const panel = document.getElementById('quickPanel');
+  const brightnessCapsules = Array.from(document.querySelectorAll('[data-brightness]'));
+  const brightnessValues = Array.from(document.querySelectorAll('[data-brightness-value]'));
+  let brightness = 20;
+  let dragging = false;
+  let touchStartY = null;
+
+  function showPage(name) {
+    Object.keys(pages).forEach(key => pages[key].classList.toggle('active', key === name));
+    toolbarButtons.forEach(button => button.classList.toggle('active', button.dataset.page === name));
+    panel.classList.remove('open');
+  }
+  function setBrightness(value) {
+    brightness = Math.max(5, Math.min(100, Math.round(value)));
+    brightnessCapsules.forEach(capsule => capsule.querySelector('.capsule-fill').style.height = brightness + '%');
+    brightnessValues.forEach(label => label.textContent = brightness + '%');
+  }
+  function togglePanel(open) { panel.classList.toggle('open', open === undefined ? !panel.classList.contains('open') : open); }
+  function brightnessFromPointer(event, capsule) {
+    const rect = capsule.getBoundingClientRect();
+    const ratio = 1 - ((event.clientY - rect.top) / rect.height);
+    setBrightness(5 + ratio * 95);
+  }
+
+  toolbarButtons.forEach(button => button.addEventListener('click', () => showPage(button.dataset.page)));
+  document.querySelectorAll('[data-page]').forEach(button => {
+    if (!button.closest('#toolbar')) button.addEventListener('click', () => showPage(button.dataset.page));
+  });
+  document.getElementById('toggleQuick').addEventListener('click', () => { showPage('home'); togglePanel(); });
+  document.getElementById('closePanel').addEventListener('click', () => togglePanel(false));
+  document.querySelectorAll('[data-brightness-set]').forEach(button => button.addEventListener('click', () => setBrightness(button.dataset.brightnessSet)));
+  document.querySelectorAll('[data-lock]').forEach(button => button.addEventListener('click', () => { document.getElementById('homeStatus').textContent = 'LOCK / PLACEHOLDER'; }));
+  document.querySelectorAll('[data-app-message]').forEach(button => button.addEventListener('click', () => { document.getElementById('appMessage').textContent = button.dataset.appMessage; }));
+
+  brightnessCapsules.forEach(capsule => {
+    capsule.addEventListener('pointerdown', event => { dragging = true; capsule.setPointerCapture(event.pointerId); brightnessFromPointer(event, capsule); });
+    capsule.addEventListener('pointermove', event => { if (dragging) brightnessFromPointer(event, capsule); });
+    capsule.addEventListener('pointerup', () => { dragging = false; });
+    capsule.addEventListener('pointercancel', () => { dragging = false; });
+  });
+  screen.addEventListener('pointerdown', event => { touchStartY = event.clientY; });
+  screen.addEventListener('pointerup', event => {
+    if (touchStartY !== null && event.clientY - touchStartY > 28 && touchStartY < 90 && pages.home.classList.contains('active')) togglePanel(true);
+    if (touchStartY !== null && event.clientY - touchStartY < -28 && panel.classList.contains('open')) togglePanel(false);
+    touchStartY = null;
+  });
+  setBrightness(brightness);
+}());
+</script>
+</body>
+</html>
