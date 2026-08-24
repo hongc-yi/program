@@ -32,7 +32,7 @@
 osThreadId_t HardwareInitTaskHandle;
 const osThreadAttr_t HardwareInitTask_attributes = {
   .name = "HardwareInitTask",
-  .stack_size = 128 * 10,
+  .stack_size = 128 * 20,
   .priority = (osPriority_t) osPriorityHigh,
 };
 
@@ -40,7 +40,7 @@ const osThreadAttr_t HardwareInitTask_attributes = {
 osThreadId_t LvHandlerTaskHandle;
 const osThreadAttr_t LvHandlerTask_attributes = {
   .name = "LvHandlerTask",
-  .stack_size = 128 * 24,
+  .stack_size = 128 * 32,
   .priority = (osPriority_t) osPriorityLow1,
 };
 

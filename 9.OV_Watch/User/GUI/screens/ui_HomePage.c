@@ -1,11 +1,19 @@
 #include "../ui.h"
 #include "../assets/watch_anime_assets.h"
 #include "lcd_init.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 lv_obj_t * ui_HomePage = NULL;
 
 static lv_obj_t * ui_AppsPage = NULL;
 static lv_obj_t * ui_AIPage = NULL;
+static lv_obj_t * ui_CalcPage = NULL;
+static lv_obj_t * ui_StopwatchPage = NULL;
+static lv_obj_t * ui_CountdownPage = NULL;
+static lv_obj_t * ui_AlarmPage = NULL;
+static lv_obj_t * ui_RtcPage = NULL;
 static lv_obj_t * ui_NoticePage = NULL;
 static lv_obj_t * ui_SettingsPage = NULL;
 
@@ -20,10 +28,31 @@ static lv_obj_t * ui_brightness_slider = NULL;
 static lv_obj_t * ui_brightness_value = NULL;
 static lv_obj_t * ui_quick_panel = NULL;
 static lv_obj_t * ui_quick_brightness_slider = NULL;
-static lv_obj_t * ui_quick_status_label = NULL;
+static lv_obj_t * ui_quick_brightness_value = NULL;
+
+static lv_obj_t * ui_calc_display = NULL;
+static lv_obj_t * ui_stopwatch_display = NULL;
+static lv_obj_t * ui_countdown_display = NULL;
+static lv_timer_t * ui_stopwatch_timer = NULL;
+static lv_timer_t * ui_countdown_timer = NULL;
+static uint32_t ui_stopwatch_ticks = 0;
+static uint32_t ui_countdown_seconds = 60;
+static bool ui_stopwatch_running = false;
+static bool ui_countdown_running = false;
 static bool ui_quick_panel_visible = false;
+static bool ui_screen_off = false;
+
+static char ui_calc_value[24] = "0";
+static char ui_calc_pending_operator = 0;
+static double ui_calc_left = 0.0;
+static bool ui_calc_entering_value = false;
 
 static void ui_brightness_event(lv_event_t * event);
+static void ui_calc_button_event(lv_event_t * event);
+static void ui_calc_back_event(lv_event_t * event);
+static void ui_calc_reset(void);
+static void ui_stopwatch_timer_cb(lv_timer_t * timer);
+static void ui_countdown_timer_cb(lv_timer_t * timer);
 
 static lv_obj_t * ui_create_label(lv_obj_t * parent, const char * text,
                                   lv_color_t color, const lv_font_t * font)
@@ -133,6 +162,75 @@ static lv_obj_t * ui_create_action_button(lv_obj_t * parent, const char * text,
     return button;
 }
 
+static lv_obj_t * ui_create_app_row(lv_obj_t * parent, const char * icon_text,
+                                    const lv_font_t * icon_font, lv_color_t icon_color,
+                                    const char * title_text, lv_event_cb_t event_cb)
+{
+    lv_obj_t * row = lv_btn_create(parent);
+    lv_obj_t * icon_bg = lv_obj_create(row);
+    lv_obj_t * icon = lv_label_create(icon_bg);
+    lv_obj_t * title = lv_label_create(row);
+
+    lv_obj_set_size(row, 196, 56);
+    lv_obj_set_style_radius(row, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(row, lv_color_hex(0x21466E), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(row, LV_OPA_80, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(row, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(row, 0, LV_PART_MAIN);
+    lv_obj_add_event_cb(row, event_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_set_size(icon_bg, 44, 44);
+    lv_obj_set_pos(icon_bg, 6, 6);
+    lv_obj_set_style_bg_color(icon_bg, icon_color, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(icon_bg, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(icon_bg, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_border_width(icon_bg, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(icon_bg, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_label_set_text(icon, icon_text);
+    lv_obj_center(icon);
+    lv_obj_set_style_text_color(icon, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(icon, icon_font, LV_PART_MAIN);
+
+    lv_label_set_text(title, title_text);
+    lv_obj_set_pos(title, 62, 16);
+    lv_obj_set_style_text_color(title, lv_color_hex(0xFFF6EF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_14, LV_PART_MAIN);
+    return row;
+}
+
+static lv_obj_t * ui_create_quick_toggle(lv_obj_t * parent, const char * icon_text,
+                                         const char * caption_text, lv_event_cb_t event_cb)
+{
+    lv_obj_t * button = lv_btn_create(parent);
+    lv_obj_t * icon = lv_label_create(button);
+    lv_obj_t * caption = lv_label_create(button);
+
+    lv_obj_set_size(button, 92, 54);
+    lv_obj_set_style_radius(button, 12, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x14264A), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x245070), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(0x385B7A), LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
+    lv_obj_add_event_cb(button, event_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_label_set_text(icon, icon_text);
+    lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 4);
+    lv_obj_set_style_text_color(icon, lv_color_hex(0xFFF6EF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(icon, &lv_font_montserrat_18, LV_PART_MAIN);
+
+    lv_label_set_text(caption, caption_text);
+    lv_obj_align(caption, LV_ALIGN_TOP_MID, 0, 32);
+    lv_obj_set_style_text_color(caption, lv_color_hex(0x77E8EF), LV_PART_MAIN);
+    lv_obj_set_style_text_font(caption, &lv_font_montserrat_14, LV_PART_MAIN);
+    return button;
+}
+
 static void ui_add_sun_icon(lv_obj_t * parent, lv_coord_t x, lv_coord_t y)
 {
     lv_obj_t * icon = lv_label_create(parent);
@@ -143,16 +241,9 @@ static void ui_add_sun_icon(lv_obj_t * parent, lv_coord_t x, lv_coord_t y)
     lv_obj_set_style_text_font(icon, &lv_font_montserrat_18, LV_PART_MAIN);
 }
 
-static void ui_apps_button_event(lv_event_t * event)
+void ui_open_apps(void)
 {
-    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    lv_scr_load(ui_AppsPage);
-}
-
-static void ui_ai_button_event(lv_event_t * event)
-{
-    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    lv_scr_load(ui_AIPage);
+    if(ui_AppsPage && lv_scr_act() == ui_HomePage) lv_scr_load(ui_AppsPage);
 }
 
 static void ui_apps_back_event(lv_event_t * event)
@@ -197,6 +288,13 @@ static void ui_settings_back_event(lv_event_t * event)
     lv_scr_load(ui_AppsPage);
 }
 
+static void ui_calc_app_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_calc_reset();
+    lv_scr_load(ui_CalcPage);
+}
+
 static void ui_brightness_event(lv_event_t * event)
 {
     lv_obj_t * slider;
@@ -213,7 +311,257 @@ static void ui_brightness_event(lv_event_t * event)
         lv_slider_set_value(ui_quick_brightness_slider, value, LV_ANIM_OFF);
     }
     if(ui_brightness_value) lv_label_set_text_fmt(ui_brightness_value, "%ld%%", (long)value);
-    if(ui_quick_status_label) lv_label_set_text_fmt(ui_quick_status_label, "%ld%%", (long)value);
+    if(ui_quick_brightness_value) lv_label_set_text_fmt(ui_quick_brightness_value, "%ld%%", (long)value);
+
+}
+
+static void ui_calc_reset(void)
+{
+    strcpy(ui_calc_value, "0");
+    ui_calc_pending_operator = 0;
+    ui_calc_left = 0.0;
+    ui_calc_entering_value = false;
+    if(ui_calc_display) lv_label_set_text(ui_calc_display, ui_calc_value);
+}
+
+static void ui_calc_refresh(void)
+{
+    if(ui_calc_display) lv_label_set_text(ui_calc_display, ui_calc_value);
+}
+
+static void ui_calc_set_error(void)
+{
+    strcpy(ui_calc_value, "ERROR");
+    ui_calc_pending_operator = 0;
+    ui_calc_entering_value = false;
+    ui_calc_refresh();
+}
+
+static void ui_calc_apply_operator(char op)
+{
+    double right = atof(ui_calc_value);
+    double result = ui_calc_left;
+
+    if(op == '+') result += right;
+    else if(op == '-') result -= right;
+    else if(op == '*') result *= right;
+    else if(op == '/') {
+        if(right == 0.0) {
+            ui_calc_set_error();
+            return;
+        }
+        result /= right;
+    }
+
+    if(result > 999999999.0 || result < -999999999.0) {
+        ui_calc_set_error();
+        return;
+    }
+
+    snprintf(ui_calc_value, sizeof(ui_calc_value), "%.8g", result);
+}
+
+static void ui_calc_handle_input(const char * input)
+{
+    char op;
+
+    if(strcmp(input, "C") == 0) {
+        ui_calc_reset();
+        return;
+    }
+
+    if(strcmp(input, "DEL") == 0) {
+        size_t length = strlen(ui_calc_value);
+        if(!ui_calc_entering_value || length <= 1U || (length == 2U && ui_calc_value[0] == '-')) {
+            strcpy(ui_calc_value, "0");
+        } else {
+            ui_calc_value[length - 1U] = '\0';
+        }
+        ui_calc_entering_value = true;
+        ui_calc_refresh();
+        return;
+    }
+
+    if(strcmp(input, "+/-") == 0) {
+        char signed_value[24];
+        if(strcmp(ui_calc_value, "0") != 0 && strcmp(ui_calc_value, "ERROR") != 0) {
+            if(ui_calc_value[0] == '-') {
+                memmove(ui_calc_value, ui_calc_value + 1, strlen(ui_calc_value));
+            } else if(strlen(ui_calc_value) < sizeof(ui_calc_value) - 1U) {
+                snprintf(signed_value, sizeof(signed_value), "-%s", ui_calc_value);
+                strcpy(ui_calc_value, signed_value);
+            }
+            ui_calc_entering_value = true;
+            ui_calc_refresh();
+        }
+        return;
+    }
+
+    if(strcmp(input, ".") == 0) {
+        if(!ui_calc_entering_value) {
+            strcpy(ui_calc_value, "0.");
+            ui_calc_entering_value = true;
+        } else if(strchr(ui_calc_value, '.') == NULL) {
+            strncat(ui_calc_value, ".", sizeof(ui_calc_value) - strlen(ui_calc_value) - 1U);
+        }
+        ui_calc_refresh();
+        return;
+    }
+
+    if(strlen(input) == 1U && input[0] >= '0' && input[0] <= '9') {
+        if(!ui_calc_entering_value || strcmp(ui_calc_value, "0") == 0 || strcmp(ui_calc_value, "ERROR") == 0) {
+            strcpy(ui_calc_value, input);
+        } else if(strlen(ui_calc_value) < sizeof(ui_calc_value) - 1U) {
+            strcat(ui_calc_value, input);
+        }
+        ui_calc_entering_value = true;
+        ui_calc_refresh();
+        return;
+    }
+
+    if(strlen(input) == 1U && strchr("+-*/", input[0]) != NULL) {
+        op = input[0];
+        if(ui_calc_pending_operator && ui_calc_entering_value) {
+            ui_calc_apply_operator(ui_calc_pending_operator);
+            if(strcmp(ui_calc_value, "ERROR") == 0) return;
+        } else {
+            ui_calc_left = atof(ui_calc_value);
+        }
+        ui_calc_pending_operator = op;
+        ui_calc_entering_value = false;
+        ui_calc_refresh();
+        return;
+    }
+
+    if(strcmp(input, "=") == 0 && ui_calc_pending_operator) {
+        ui_calc_apply_operator(ui_calc_pending_operator);
+        ui_calc_pending_operator = 0;
+        ui_calc_entering_value = false;
+        ui_calc_refresh();
+    }
+}
+
+static void ui_calc_button_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_calc_handle_input((const char *)lv_obj_get_user_data(lv_event_get_target(event)));
+}
+
+static void ui_calc_back_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    lv_scr_load(ui_AppsPage);
+}
+
+static void ui_stopwatch_timer_cb(lv_timer_t * timer)
+{
+    LV_UNUSED(timer);
+    ui_stopwatch_ticks++;
+    if(ui_stopwatch_display) {
+        lv_label_set_text_fmt(ui_stopwatch_display, "%02lu:%02lu.%01lu",
+                              (unsigned long)(ui_stopwatch_ticks / 600U),
+                              (unsigned long)((ui_stopwatch_ticks / 10U) % 60U),
+                              (unsigned long)(ui_stopwatch_ticks % 10U));
+    }
+}
+
+static void ui_countdown_timer_cb(lv_timer_t * timer)
+{
+    LV_UNUSED(timer);
+    if(ui_countdown_seconds > 0U) ui_countdown_seconds--;
+    if(ui_countdown_display) {
+        lv_label_set_text_fmt(ui_countdown_display, "%02lu:%02lu",
+                              (unsigned long)(ui_countdown_seconds / 60U),
+                              (unsigned long)(ui_countdown_seconds % 60U));
+    }
+    if(ui_countdown_seconds == 0U) {
+        ui_countdown_running = false;
+        if(ui_countdown_timer) lv_timer_pause(ui_countdown_timer);
+    }
+}
+
+static void ui_stopwatch_app_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_stopwatch_ticks = 0;
+    ui_stopwatch_running = false;
+    if(ui_stopwatch_timer) lv_timer_pause(ui_stopwatch_timer);
+    lv_scr_load(ui_StopwatchPage);
+}
+
+static void ui_countdown_app_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_countdown_seconds = 60;
+    ui_countdown_running = false;
+    if(ui_countdown_timer) lv_timer_pause(ui_countdown_timer);
+    lv_scr_load(ui_CountdownPage);
+}
+
+static void ui_alarm_app_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    lv_scr_load(ui_AlarmPage);
+}
+
+static void ui_rtc_app_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    lv_scr_load(ui_RtcPage);
+}
+
+static void ui_stopwatch_toggle_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_stopwatch_running = !ui_stopwatch_running;
+    if(ui_stopwatch_timer) {
+        if(ui_stopwatch_running) lv_timer_resume(ui_stopwatch_timer);
+        else lv_timer_pause(ui_stopwatch_timer);
+    }
+}
+
+static void ui_stopwatch_reset_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_stopwatch_ticks = 0;
+    ui_stopwatch_running = false;
+    if(ui_stopwatch_timer) lv_timer_pause(ui_stopwatch_timer);
+    if(ui_stopwatch_display) lv_label_set_text(ui_stopwatch_display, "00:00.0");
+}
+
+static void ui_countdown_toggle_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if(ui_countdown_seconds == 0U) ui_countdown_seconds = 60U;
+    ui_countdown_running = !ui_countdown_running;
+    if(ui_countdown_timer) {
+        if(ui_countdown_running) lv_timer_resume(ui_countdown_timer);
+        else lv_timer_pause(ui_countdown_timer);
+    }
+}
+
+static void ui_countdown_add_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if(ui_countdown_seconds <= 5940U) ui_countdown_seconds += 60U;
+    if(ui_countdown_display) lv_label_set_text_fmt(ui_countdown_display, "%02lu:%02lu", (unsigned long)(ui_countdown_seconds / 60U), (unsigned long)(ui_countdown_seconds % 60U));
+}
+
+static void ui_countdown_sub_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if(ui_countdown_seconds > 10U) ui_countdown_seconds -= 10U;
+    else ui_countdown_seconds = 0U;
+    if(ui_countdown_display) lv_label_set_text_fmt(ui_countdown_display, "%02lu:%02lu", (unsigned long)(ui_countdown_seconds / 60U), (unsigned long)(ui_countdown_seconds % 60U));
+}
+
+static void ui_countdown_reset_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_countdown_seconds = 60U;
+    ui_countdown_running = false;
+    if(ui_countdown_timer) lv_timer_pause(ui_countdown_timer);
+    if(ui_countdown_display) lv_label_set_text(ui_countdown_display, "01:00");
 }
 
 static void ui_quick_panel_anim(int32_t end_y)
@@ -231,31 +579,36 @@ static void ui_quick_panel_anim(int32_t end_y)
     lv_anim_start(&animation);
 }
 
-static void ui_quick_close_event(lv_event_t * event)
+static void ui_quick_panel_close(void)
 {
-    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
     ui_quick_panel_visible = false;
-    ui_quick_panel_anim(-170);
-}
-
-static void ui_quick_night_event(lv_event_t * event)
-{
-    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    ui_set_brightness(15);
-    if(ui_quick_status_label) lv_label_set_text(ui_quick_status_label, "15%");
-}
-
-static void ui_quick_day_event(lv_event_t * event)
-{
-    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    ui_set_brightness(50);
-    if(ui_quick_status_label) lv_label_set_text(ui_quick_status_label, "50%");
+    ui_quick_panel_anim(-160);
 }
 
 static void ui_quick_lock_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    if(ui_quick_status_label) lv_label_set_text(ui_quick_status_label, "LOCK");
+    LCD_Close_Light();
+    ui_screen_off = true;
+    ui_quick_panel_close();
+}
+
+static void ui_quick_wifi_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+
+}
+
+static void ui_quick_bluetooth_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+
+}
+
+static void ui_quick_power_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+
 }
 
 void ui_handle_swipe(lv_dir_t direction)
@@ -266,15 +619,39 @@ void ui_handle_swipe(lv_dir_t direction)
         ui_quick_panel_visible = true;
         ui_quick_panel_anim(0);
     } else if(direction == LV_DIR_TOP && ui_quick_panel_visible) {
-        ui_quick_panel_visible = false;
-        ui_quick_panel_anim(-170);
+        ui_quick_panel_close();
     }
+}
+
+static bool ui_quick_panel_hit(lv_coord_t x, lv_coord_t y)
+{
+    lv_coord_t panel_y = lv_obj_get_y(ui_quick_panel);
+    lv_coord_t panel_w = lv_obj_get_width(ui_quick_panel);
+    lv_coord_t panel_h = lv_obj_get_height(ui_quick_panel);
+
+    if(panel_y >= 0) { /* panel fully open (or animating downward) */
+        if(x >= 0 && x < panel_w && y >= panel_y && y < panel_y + panel_h) return true;
+    } else {
+        /* panel still animating up: its visible bottom edge is panel_y + panel_h */
+        if(x >= 0 && x < panel_w && y >= 0 && y < panel_y + panel_h) return true;
+    }
+    return false;
 }
 
 void ui_handle_touch(lv_coord_t x, lv_coord_t y)
 {
-    if(lv_scr_act() == ui_HomePage && ui_status_label) {
-        lv_label_set_text_fmt(ui_status_label, "TOUCH / %d,%d", (int)x, (int)y);
+    if(ui_screen_off) {
+        LCD_Open_Light();
+        ui_screen_off = false;
+        ui_quick_panel_close();
+        return;
+    }
+
+    if(lv_scr_act() == ui_HomePage) {
+        /* Only dismiss the panel when the touch is OUTSIDE the panel area,
+           so the toggle buttons and the brightness slider keep working. */
+        if(ui_quick_panel_visible && !ui_quick_panel_hit(x, y)) ui_quick_panel_close();
+        if(ui_status_label) lv_label_set_text_fmt(ui_status_label, "TOUCH / %d,%d", (int)x, (int)y);
     }
 }
 
@@ -289,8 +666,6 @@ void ui_HomePage_screen_init(void)
     lv_obj_t * env_card;
     lv_obj_t * label;
     lv_obj_t * progress;
-    lv_obj_t * apps_button;
-    lv_obj_t * ai_button;
 
     ui_HomePage = lv_obj_create(NULL);
     ui_style_screen(ui_HomePage);
@@ -343,35 +718,180 @@ void ui_HomePage_screen_init(void)
     ui_detail_label = ui_create_label(ui_HomePage, "DEMO DATA / PLACEHOLDER", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
     lv_obj_align(ui_detail_label, LV_ALIGN_TOP_MID, 0, 234);
 
-    apps_button = ui_create_action_button(ui_HomePage, "APPS", 96, 28, ui_apps_button_event);
-    lv_obj_align(apps_button, LV_ALIGN_TOP_LEFT, 14, 250);
-    ai_button = ui_create_action_button(ui_HomePage, "AI", 96, 28, ui_ai_button_event);
-    lv_obj_align(ai_button, LV_ALIGN_TOP_RIGHT, -14, 250);
-
     ui_AppsPage = lv_obj_create(NULL);
     ui_style_screen(ui_AppsPage);
-    ui_create_anime_background(ui_AppsPage, &watch_apps);
     {
         lv_obj_t * back = ui_create_action_button(ui_AppsPage, "<", 34, 28, ui_apps_back_event);
+        lv_obj_t * list;
+        lv_obj_t * item;
         lv_obj_set_pos(back, 14, 14);
         title = ui_create_label(ui_AppsPage, "APPS", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
         lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
-        section = ui_create_label(ui_AppsPage, "WATCH MODULES / 04", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        list = lv_obj_create(ui_AppsPage);
+        lv_obj_set_pos(list, 8, 48);
+        lv_obj_set_size(list, 224, 222);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scroll_dir(list, LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_top(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_left(list, 6, LV_PART_MAIN);
+        lv_obj_set_style_pad_right(list, 6, LV_PART_MAIN);
+        lv_obj_set_style_pad_row(list, 0, LV_PART_MAIN);
+
+        item = ui_create_app_row(list, "\xEE\x9C\x86", &ui_font_iconfont34, lv_color_hex(0x77E8EF), "ENVIRONMENT", ui_environment_event);
+        lv_obj_set_pos(item, 6, 0);
+        item = ui_create_app_row(list, "\xEE\x9E\x88", &ui_font_iconfont28, lv_color_hex(0xD38EBF), "AI ASSISTANT", ui_ai_app_event);
+        lv_obj_set_pos(item, 6, 56);
+        item = ui_create_app_row(list, "\xEE\x98\x81", &ui_font_iconfont30, lv_color_hex(0xFFD27A), "RTC TIME", ui_rtc_app_event);
+        lv_obj_set_pos(item, 6, 112);
+        item = ui_create_app_row(list, "\xEE\xA2\x9B", &ui_font_iconfont28, lv_color_hex(0x8CECF5), "CALCULATOR", ui_calc_app_event);
+        lv_obj_set_pos(item, 6, 168);
+        item = ui_create_app_row(list, "\xEE\x98\xB3", &ui_font_iconfont34, lv_color_hex(0x77E8EF), "STOPWATCH", ui_stopwatch_app_event);
+        lv_obj_set_pos(item, 6, 224);
+        item = ui_create_app_row(list, "\xEE\x99\x92", &ui_font_iconfont34, lv_color_hex(0xFFD27A), "COUNTDOWN", ui_countdown_app_event);
+        lv_obj_set_pos(item, 6, 280);
+        item = ui_create_app_row(list, "\xEE\x9D\xA2", &ui_font_iconfont34, lv_color_hex(0xD38EBF), "ALARM", ui_alarm_app_event);
+        lv_obj_set_pos(item, 6, 336);
+        item = ui_create_app_row(list, "\xEE\x98\x80", &ui_font_iconfont30, lv_color_hex(0x8CECF5), "SETTINGS", ui_settings_event);
+        lv_obj_set_pos(item, 6, 392);
+    }
+
+    ui_CalcPage = lv_obj_create(NULL);
+    ui_style_screen(ui_CalcPage);
+    {
+        lv_obj_t * back = ui_create_action_button(ui_CalcPage, "<", 34, 28, ui_calc_back_event);
+        lv_obj_set_pos(back, 14, 14);
+        title = ui_create_label(ui_CalcPage, "CALC", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+        section = ui_create_label(ui_CalcPage, "BASIC / FOUR OPERATIONS", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
         lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 48);
+
+        ui_calc_display = ui_create_card(ui_CalcPage, 14, 70, 212, 38);
+        lv_obj_set_style_bg_color(ui_calc_display, lv_color_hex(0x09162C), LV_PART_MAIN);
+        lv_obj_set_style_border_color(ui_calc_display, lv_color_hex(0x5F7FA7), LV_PART_MAIN);
         {
-            lv_obj_t * env = ui_create_action_button(ui_AppsPage, "ENV", 96, 42, ui_environment_event);
-            lv_obj_t * ai = ui_create_action_button(ui_AppsPage, "AI", 96, 42, ui_ai_app_event);
-            lv_obj_t * rtc = ui_create_action_button(ui_AppsPage, "RTC", 96, 42, ui_rtc_event);
-            lv_obj_t * settings = ui_create_action_button(ui_AppsPage, "SET", 96, 42, ui_settings_event);
-            lv_obj_set_pos(env, 14, 78);
-            lv_obj_set_pos(ai, 130, 78);
-            lv_obj_set_pos(rtc, 14, 130);
-            lv_obj_set_pos(settings, 130, 130);
+            lv_obj_t * value = ui_create_label(ui_calc_display, "0", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+            lv_obj_align(value, LV_ALIGN_RIGHT_MID, -10, 0);
+            ui_calc_display = value;
         }
-        ui_app_status_label = ui_create_label(ui_AppsPage, "CHOOSE A MODULE", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
-        lv_obj_align(ui_app_status_label, LV_ALIGN_TOP_MID, 0, 200);
-        label = ui_create_label(ui_AppsPage, "MODULES ARE PLACEHOLDERS", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 224);
+
+        {
+            static const char * keys[20] = {
+                "C", "DEL", "/", "*",
+                "7", "8", "9", "-",
+                "4", "5", "6", "+",
+                "1", "2", "3", "=",
+                "+/-", "0", ".", ""
+            };
+            int row;
+            int col;
+            for(row = 0; row < 5; row++) {
+                for(col = 0; col < 4; col++) {
+                    const char * key = keys[row * 4 + col];
+                    lv_obj_t * button;
+                    if(key[0] == '\0') continue;
+                    button = ui_create_action_button(ui_CalcPage, key, 50, 30, ui_calc_button_event);
+                    lv_obj_set_pos(button, 12 + col * 55, 116 + row * 32);
+                    lv_obj_set_user_data(button, (void *)key);
+                    if(strcmp(key, "=") == 0) {
+                        lv_obj_set_style_bg_color(button, lv_color_hex(0x1A5A73), LV_PART_MAIN);
+                        lv_obj_set_style_border_color(button, lv_color_hex(0x77E8EF), LV_PART_MAIN);
+                    } else if(strcmp(key, "C") == 0 || strcmp(key, "DEL") == 0) {
+                        lv_obj_set_style_bg_color(button, lv_color_hex(0x3A244A), LV_PART_MAIN);
+                    }
+                }
+            }
+        }
+    }
+
+    ui_StopwatchPage = lv_obj_create(NULL);
+    ui_style_screen(ui_StopwatchPage);
+    {
+        lv_obj_t * back = ui_create_action_button(ui_StopwatchPage, "<", 34, 28, ui_calc_back_event);
+        lv_obj_t * start = ui_create_action_button(ui_StopwatchPage, "START / PAUSE", 118, 34, ui_stopwatch_toggle_event);
+        lv_obj_t * reset = ui_create_action_button(ui_StopwatchPage, "RESET", 70, 34, ui_stopwatch_reset_event);
+        lv_obj_set_pos(back, 14, 14);
+        title = ui_create_label(ui_StopwatchPage, "STOPWATCH", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+        section = ui_create_label(ui_StopwatchPage, "LOCAL / NO RTC REQUIRED", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 52);
+        ui_stopwatch_display = ui_create_label(ui_StopwatchPage, "00:00.0", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
+        lv_obj_align(ui_stopwatch_display, LV_ALIGN_TOP_MID, 0, 96);
+        lv_obj_set_pos(start, 26, 172);
+        lv_obj_set_pos(reset, 148, 172);
+        label = ui_create_label(ui_StopwatchPage, "TIMES ARE RESET ON REBOOT", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 226);
+        ui_stopwatch_timer = lv_timer_create(ui_stopwatch_timer_cb, 100, NULL);
+        lv_timer_pause(ui_stopwatch_timer);
+    }
+
+    ui_CountdownPage = lv_obj_create(NULL);
+    ui_style_screen(ui_CountdownPage);
+    {
+        lv_obj_t * back = ui_create_action_button(ui_CountdownPage, "<", 34, 28, ui_calc_back_event);
+        lv_obj_t * start = ui_create_action_button(ui_CountdownPage, "START / PAUSE", 118, 34, ui_countdown_toggle_event);
+        lv_obj_t * reset = ui_create_action_button(ui_CountdownPage, "RESET", 70, 34, ui_countdown_reset_event);
+        lv_obj_t * add = ui_create_action_button(ui_CountdownPage, "+1 MIN", 70, 30, ui_countdown_add_event);
+        lv_obj_t * sub = ui_create_action_button(ui_CountdownPage, "-10 SEC", 70, 30, ui_countdown_sub_event);
+        lv_obj_set_pos(back, 14, 14);
+        title = ui_create_label(ui_CountdownPage, "COUNTDOWN", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+        section = ui_create_label(ui_CountdownPage, "LOCAL TIMER / DEMO", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 52);
+        ui_countdown_display = ui_create_label(ui_CountdownPage, "01:00", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
+        lv_obj_align(ui_countdown_display, LV_ALIGN_TOP_MID, 0, 96);
+        lv_obj_set_pos(start, 26, 164);
+        lv_obj_set_pos(reset, 148, 164);
+        lv_obj_set_pos(add, 44, 210);
+        lv_obj_set_pos(sub, 126, 210);
+        label = ui_create_label(ui_CountdownPage, "NO SOUND / VIBRATION MODULE YET", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 252);
+        ui_countdown_timer = lv_timer_create(ui_countdown_timer_cb, 1000, NULL);
+        lv_timer_pause(ui_countdown_timer);
+    }
+
+    ui_AlarmPage = lv_obj_create(NULL);
+    ui_style_screen(ui_AlarmPage);
+    {
+        lv_obj_t * back = ui_create_action_button(ui_AlarmPage, "<", 34, 28, ui_calc_back_event);
+        lv_obj_set_pos(back, 14, 14);
+        title = ui_create_label(ui_AlarmPage, "ALARM", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+        section = ui_create_label(ui_AlarmPage, "FRAMEWORK / SILENT", lv_color_hex(0xFFD27A), &lv_font_montserrat_14);
+        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 54);
+        label = ui_create_card(ui_AlarmPage, 20, 90, 200, 74);
+        {
+            lv_obj_t * value = ui_create_label(label, "07:30", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
+            lv_obj_align(value, LV_ALIGN_CENTER, 0, 0);
+        }
+        label = ui_create_label(ui_AlarmPage, "ALARM STORAGE / NOT ENABLED", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 190);
+        label = ui_create_label(ui_AlarmPage, "BUZZER OR VIBRATION REQUIRED", lv_color_hex(0x6D87A7), &lv_font_montserrat_14);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 218);
+    }
+
+    ui_RtcPage = lv_obj_create(NULL);
+    ui_style_screen(ui_RtcPage);
+    {
+        lv_obj_t * back = ui_create_action_button(ui_RtcPage, "<", 34, 28, ui_calc_back_event);
+        lv_obj_t * set = ui_create_action_button(ui_RtcPage, "SETUP NEXT", 118, 34, ui_rtc_event);
+        lv_obj_set_pos(back, 14, 14);
+        title = ui_create_label(ui_RtcPage, "RTC TIME", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+        section = ui_create_label(ui_RtcPage, "HARDWARE MODULE / PENDING", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 52);
+        label = ui_create_label(ui_RtcPage, "2026-08-24", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 94);
+        label = ui_create_label(ui_RtcPage, "12:00:00", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 126);
+        lv_obj_set_pos(set, 61, 196);
+        label = ui_create_label(ui_RtcPage, "ENABLE RTC + LSE IN CUBEMX FIRST", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 244);
     }
 
     ui_AIPage = lv_obj_create(NULL);
@@ -398,7 +918,6 @@ void ui_HomePage_screen_init(void)
 
     ui_NoticePage = lv_obj_create(NULL);
     ui_style_screen(ui_NoticePage);
-    ui_create_anime_background(ui_NoticePage, &watch_notice);
     {
         lv_obj_t * back = ui_create_action_button(ui_NoticePage, "<", 34, 28, ui_apps_back_event);
         lv_obj_set_pos(back, 14, 14);
@@ -436,35 +955,34 @@ void ui_HomePage_screen_init(void)
     }
 
     ui_quick_panel = lv_obj_create(ui_HomePage);
-    lv_obj_set_pos(ui_quick_panel, 0, -170);
-    lv_obj_set_size(ui_quick_panel, 240, 170);
+    lv_obj_set_pos(ui_quick_panel, 0, -160);
+    lv_obj_set_size(ui_quick_panel, 240, 160);
     lv_obj_clear_flag(ui_quick_panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(ui_quick_panel, lv_color_hex(0x0D1832), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ui_quick_panel, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(ui_quick_panel, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(ui_quick_panel, lv_color_hex(0xD38EBF), LV_PART_MAIN);
+    lv_obj_set_style_border_width(ui_quick_panel, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(ui_quick_panel, 0, LV_PART_MAIN);
     {
-        lv_obj_t * panel_title = ui_create_label(ui_quick_panel, "QUICK PANEL", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
-        lv_obj_set_pos(panel_title, 15, 12);
-        lv_obj_t * close = ui_create_action_button(ui_quick_panel, "^", 34, 26, ui_quick_close_event);
-        lv_obj_set_pos(close, 190, 10);
-        section = ui_create_label(ui_quick_panel, "BRIGHTNESS", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
-        lv_obj_set_pos(section, 84, 43);
+        lv_obj_t * wifi = ui_create_quick_toggle(ui_quick_panel, LV_SYMBOL_WIFI, "WIFI", ui_quick_wifi_event);
+        lv_obj_t * bluetooth = ui_create_quick_toggle(ui_quick_panel, LV_SYMBOL_BLUETOOTH, "BLE", ui_quick_bluetooth_event);
+        lv_obj_t * screen = ui_create_quick_toggle(ui_quick_panel, LV_SYMBOL_EYE_CLOSE, "OFF", ui_quick_lock_event);
+        lv_obj_t * power = ui_create_quick_toggle(ui_quick_panel, LV_SYMBOL_POWER, "PWR", ui_quick_power_event);
+        lv_obj_set_pos(wifi, 12, 12);
+        lv_obj_set_pos(bluetooth, 136, 12);
+        lv_obj_set_pos(screen, 12, 74);
+        lv_obj_set_pos(power, 136, 74);
         ui_quick_brightness_slider = lv_slider_create(ui_quick_panel);
-        ui_style_brightness_slider(ui_quick_brightness_slider, 18, 40, 48, 96);
-        ui_add_sun_icon(ui_quick_panel, 30, 106);
-        ui_quick_status_label = ui_create_label(ui_quick_panel, "20%", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
-        lv_obj_set_pos(ui_quick_status_label, 84, 66);
-        lv_label_set_text_fmt(ui_quick_status_label, "%d%%", (int)LCD_Get_Light());
+        ui_style_brightness_slider(ui_quick_brightness_slider, 64, 138, 138, 18);
         {
-            lv_obj_t * night = ui_create_action_button(ui_quick_panel, "NIGHT", 46, 28, ui_quick_night_event);
-            lv_obj_t * day = ui_create_action_button(ui_quick_panel, "DAY", 46, 28, ui_quick_day_event);
-            lv_obj_t * lock = ui_create_action_button(ui_quick_panel, "LOCK", 46, 28, ui_quick_lock_event);
-            lv_obj_set_pos(night, 82, 108);
-            lv_obj_set_pos(day, 132, 108);
-            lv_obj_set_pos(lock, 182, 108);
+            lv_obj_t * sun = lv_label_create(ui_quick_panel);
+            lv_label_set_text(sun, "*");
+            lv_obj_align_to(sun, ui_quick_brightness_slider, LV_ALIGN_OUT_RIGHT_MID, 6, -3);
+            lv_obj_set_style_text_color(sun, lv_color_hex(0xFFD27A), LV_PART_MAIN);
+            lv_obj_set_style_text_font(sun, &lv_font_montserrat_24, LV_PART_MAIN);
         }
+        ui_quick_brightness_value = ui_create_label(ui_quick_panel, "20%", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_set_pos(ui_quick_brightness_value, 12, 136);
+        lv_label_set_text_fmt(ui_quick_brightness_value, "%d%%", (int)LCD_Get_Light());
     }
 }
 
@@ -491,12 +1009,16 @@ void ui_set_brightness(uint8_t percent)
     if(ui_brightness_slider) lv_slider_set_value(ui_brightness_slider, percent, LV_ANIM_OFF);
     if(ui_quick_brightness_slider) lv_slider_set_value(ui_quick_brightness_slider, percent, LV_ANIM_OFF);
     if(ui_brightness_value) lv_label_set_text_fmt(ui_brightness_value, "%d%%", (int)percent);
-    if(ui_quick_status_label) lv_label_set_text_fmt(ui_quick_status_label, "%d%%", (int)percent);
+    if(ui_quick_brightness_value) lv_label_set_text_fmt(ui_quick_brightness_value, "%d%%", (int)percent);
+
 }
 
 void ui_HomePage_screen_destroy(void)
 {
     if(ui_SettingsPage) lv_obj_del(ui_SettingsPage);
+    if(ui_stopwatch_timer) lv_timer_del(ui_stopwatch_timer);
+    if(ui_countdown_timer) lv_timer_del(ui_countdown_timer);
+    if(ui_CalcPage) lv_obj_del(ui_CalcPage);
     if(ui_NoticePage) lv_obj_del(ui_NoticePage);
     if(ui_AIPage) lv_obj_del(ui_AIPage);
     if(ui_AppsPage) lv_obj_del(ui_AppsPage);
@@ -505,6 +1027,13 @@ void ui_HomePage_screen_destroy(void)
     ui_HomePage = NULL;
     ui_AppsPage = NULL;
     ui_AIPage = NULL;
+    ui_CalcPage = NULL;
+    ui_StopwatchPage = NULL;
+    ui_CountdownPage = NULL;
+    ui_AlarmPage = NULL;
+    ui_RtcPage = NULL;
+    ui_stopwatch_timer = NULL;
+    ui_countdown_timer = NULL;
     ui_NoticePage = NULL;
     ui_SettingsPage = NULL;
     ui_connection_label = NULL;
@@ -518,6 +1047,7 @@ void ui_HomePage_screen_destroy(void)
     ui_brightness_value = NULL;
     ui_quick_panel = NULL;
     ui_quick_brightness_slider = NULL;
-    ui_quick_status_label = NULL;
+    ui_quick_brightness_value = NULL;
     ui_quick_panel_visible = false;
+    ui_screen_off = false;
 }

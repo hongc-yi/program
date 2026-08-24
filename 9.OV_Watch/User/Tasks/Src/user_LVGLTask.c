@@ -6,6 +6,7 @@
 // tasks
 #include "user_TasksInit.h"
 #include "user_LVGLTask.h"
+#include "key.h"
 
 //gui
 #include "lvgl.h"
@@ -42,6 +43,9 @@ void LvHandlerTask(void *argument)
   uint32_t _time = 1; // default delay time
   while(1)
   {
+    if(Key_Get_Pending()) {
+      ui_open_apps();
+    }
 		_time = lv_timer_handler();
     // 限制最大休眠时间，保证按键队列被及时读取
     if(_time > 30) {

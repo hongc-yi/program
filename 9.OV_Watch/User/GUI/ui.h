@@ -12,6 +12,11 @@ extern "C" {
 
 #include "lvgl.h"
 
+extern const lv_font_t ui_font_iconfont28;
+extern const lv_font_t ui_font_iconfont30;
+extern const lv_font_t ui_font_iconfont32;
+extern const lv_font_t ui_font_iconfont34;
+
 
 ///////////////////// SCREENS ////////////////////
 
@@ -30,6 +35,7 @@ void ui_set_connection_state(const char * state);
 void ui_set_brightness(uint8_t percent);
 void ui_handle_swipe(lv_dir_t direction);
 void ui_handle_touch(lv_coord_t x, lv_coord_t y);
+void ui_open_apps(void);
 
 #ifdef __cplusplus
 } /*extern "C"*/

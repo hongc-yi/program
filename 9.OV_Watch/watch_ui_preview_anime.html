@@ -51,15 +51,23 @@ body {
 .stat-value small { color: var(--gold); font-size: 9px; }
 .status-line { top: 216px; left: 0; right: 0; color: var(--white); text-align: center; font-size: 11px; font-weight: 900; letter-spacing: 1px; text-shadow: 1px 1px 0 #562a83; }
 .detail-line { top: 233px; left: 0; right: 0; color: #d5bdf3; text-align: center; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+.key-hint { top: 255px; left: 0; right: 0; color: var(--gold); text-align: center; font-size: 9px; font-weight: 900; letter-spacing: 1px; }
 .action { position: absolute; z-index: 3; top: 250px; width: 96px; height: 28px; border: 1px solid #ff9bdcaa; border-radius: 10px 3px 10px 3px; background: #341652cc; color: var(--white); font-size: 11px; font-weight: 900; letter-spacing: 1px; cursor: pointer; }
 .action:hover, .action:active, .tile:active { background: #713a8dcc; }
 .apps-action { left: 14px; }
 .ai-action { right: 14px; }
-.panel { position: absolute; z-index: 8; left: 0; top: 0; width: 240px; height: 170px; border: 1px solid #ff9bdc99; border-radius: 0 0 24px 24px; background: linear-gradient(135deg, #251343f5, #100b26f5); transform: translateY(-170px); transition: transform .2s ease-out; box-shadow: 0 14px 30px #0007; }
+.panel { position: absolute; z-index: 8; left: 0; top: 0; width: 240px; height: 160px; border: 1px solid #ff9bdc99; border-radius: 0 0 24px 24px; background: linear-gradient(135deg, #251343f5, #100b26f5); transform: translateY(-160px); transition: transform .2s ease-out; box-shadow: 0 14px 30px #0007; }
 .panel.open { transform: translateY(0); }
-.panel-title { left: 15px; top: 12px; color: var(--white); font-size: 16px; font-weight: 900; letter-spacing: 1px; }
-.panel-title::after { content: " / SETTINGS"; color: var(--pink); font-size: 9px; }
-.panel-close { position: absolute; z-index: 2; right: 15px; top: 10px; width: 32px; height: 26px; border: 1px solid #ff9bdc99; border-radius: 9px 3px 9px 3px; background: #341652; color: var(--white); font-weight: 900; cursor: pointer; }
+.qt-grid { position: absolute; left: 12px; top: 12px; width: 216px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.qt { height: 54px; border: 1px solid #385b7a; border-radius: 12px; background: #14264a; color: var(--white); cursor: pointer; padding: 0; text-align: center; }
+.qt:active { background: #245070; }
+.qt i { display: block; font-style: normal; font-size: 16px; line-height: 22px; color: var(--white); }
+.qt b { display: block; font-size: 11px; font-weight: 900; letter-spacing: 1px; color: var(--cyan); }
+.brightness-row { position: absolute; left: 12px; top: 138px; width: 216px; display: flex; align-items: center; gap: 4px; }
+.brightness-row .sun { position: static; width: 26px; height: 26px; font-size: 24px; line-height: 26px; text-shadow: 0 0 8px #ffd27a99; }
+.brightness-row .capsule { position: static; width: 143px; height: 16px; border-radius: 999px; cursor: ew-resize; box-shadow: inset 0 0 8px #0008; }
+.brightness-row .capsule-fill { height: 100%; width: 20%; border-radius: inherit; background: linear-gradient(90deg, var(--pink), var(--violet)); transition: width .08s linear; box-shadow: 5px 0 14px #ff78c988; }
+.brightness-row .brightness-value { position: static; color: var(--white); font-size: 15px; font-weight: 900; text-shadow: 1px 1px 0 #632d93; }
 .brightness-caption { left: 84px; top: 42px; color: var(--cyan); font-size: 11px; font-weight: 900; letter-spacing: 1px; }
 .capsule { position: absolute; left: 18px; top: 40px; width: 48px; height: 96px; overflow: hidden; border: 1px solid #ff9bdcaa; border-radius: 999px; background: #2a164a; cursor: ns-resize; touch-action: none; box-shadow: inset 0 0 12px #0008; }
 .capsule::before { content: ""; position: absolute; inset: 4px; border: 1px solid #ffffff20; border-radius: inherit; z-index: 2; pointer-events: none; }
@@ -71,12 +79,30 @@ body {
 .page-back { position: absolute; z-index: 3; left: 14px; top: 14px; width: 34px; height: 28px; border: 1px solid #ff9bdc99; border-radius: 9px 3px 9px 3px; background: #341652; color: var(--white); font-weight: 900; cursor: pointer; }
 .page-heading { top: 18px; left: 0; right: 0; color: var(--white); text-align: center; font-size: 19px; font-weight: 900; letter-spacing: 1px; text-shadow: 2px 2px 0 #632d93; }
 .page-subheading { top: 48px; left: 0; right: 0; color: var(--cyan); text-align: center; font-size: 10px; font-weight: 900; letter-spacing: 2px; }
-.tiles { position: absolute; z-index: 2; top: 78px; left: 14px; display: grid; grid-template-columns: 96px 96px; gap: 10px 20px; }
-.tile { height: 42px; border: 1px solid #ff9bdc99; border-radius: 12px 4px 12px 4px; background: #2b174dcc; color: var(--white); font-size: 12px; font-weight: 900; letter-spacing: 1px; cursor: pointer; }
-.app-message { top: 200px; left: 0; right: 0; color: var(--white); text-align: center; font-size: 10px; font-weight: 900; letter-spacing: .5px; }
-.app-note { top: 224px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 9px; font-weight: 800; }
+.app-list { position: absolute; z-index: 2; top: 70px; left: 10px; width: 220px; height: 200px; overflow-y: auto; padding: 0 6px; border: 0; border-radius: 0; background: transparent; }
+.app-list .tile { position: relative; display: block; width: 202px; height: 56px; margin-bottom: 0; padding: 0 0 0 62px; border: 0; border-radius: 0; background: transparent; color: var(--white); text-align: left; cursor: pointer; }
+.app-list .tile::before { content: attr(data-icon); position: absolute; left: 6px; top: 6px; width: 44px; height: 44px; border-radius: 50%; background: var(--icon-color, #3b82f6); color: #fff; text-align: center; line-height: 44px; font-size: 22px; font-weight: 900; box-shadow: 0 0 0 3px #ffffff18, 0 3px 10px #0008; }
+.app-list .tile b { display: block; padding-top: 18px; color: var(--white); font-size: 14px; line-height: 20px; }
+.app-list .tile small, .app-list .tile i { display: none; }
+.app-list .tile:active { background: #ffffff18; }
+.app-message { top: 238px; left: 0; right: 0; color: var(--white); text-align: center; font-size: 10px; font-weight: 900; letter-spacing: .5px; }
+.app-note { top: 258px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 9px; font-weight: 800; }
+.timer-page .timer-display { top: 96px; left: 0; right: 0; color: var(--white); text-align: center; font-size: 38px; font-weight: 900; text-shadow: 2px 2px 0 #632d93; }
+.timer-page .timer-buttons { position: absolute; top: 164px; left: 26px; display: flex; gap: 4px; }
+.timer-page .timer-button { width: 90px; height: 34px; border: 1px solid #ff9bdc99; border-radius: 10px 4px 10px 4px; background: #14264Add; color: var(--white); font-size: 9px; font-weight: 900; cursor: pointer; }
+.timer-page .timer-small-buttons { position: absolute; top: 210px; left: 44px; display: flex; gap: 12px; }
+.timer-page .timer-small-buttons .timer-button { width: 70px; height: 30px; }
+.timer-page .timer-note { top: 244px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 9px; font-weight: 800; }
+.calc-page .calc-display { position: absolute; top: 70px; left: 14px; width: 212px; height: 38px; padding: 8px 10px; border: 1px solid #5f7fa7; border-radius: 12px 4px 12px 4px; background: #09162cdd; color: var(--white); text-align: right; font-size: 20px; font-weight: 900; overflow: hidden; }
+.calc-page .calc-grid { position: absolute; top: 116px; left: 14px; display: grid; grid-template-columns: repeat(4, 48px); grid-auto-rows: 28px; gap: 3px 6px; }
+.calc-page .calc-key { border: 1px solid #ff9bdc99; border-radius: 9px 3px 9px 3px; background: #14264Add; color: var(--white); font-size: 12px; font-weight: 900; cursor: pointer; }
+.calc-page .calc-key:active { background: #245070; }
+.calc-page .calc-key.operator { color: var(--cyan); }
+.calc-page .calc-key.clear { background: #3a244a; }
+.calc-page .calc-key.equals { border-color: var(--cyan); background: #1a5a73; }
 .settings-page .brightness-caption { left: 0; right: 0; top: 52px; text-align: center; }
 .settings-page .capsule { left: 98px; top: 70px; width: 44px; height: 106px; }
+.settings-page .capsule .capsule-fill { width: 100%; height: 20%; }
 .settings-page .sun { left: 108px; top: 140px; }
 .settings-page .brightness-value { top: 182px; left: 0; right: 0; text-align: center; }
 .settings-note { top: 204px; left: 0; right: 0; color: var(--muted); text-align: center; font-size: 10px; font-weight: 900; }
@@ -116,27 +142,56 @@ body {
           <div class="stat stat-right"><span class="stat-label">AHT21</span><span class="stat-value">24° <small>48%</small></span></div>
           <span class="label status-line" id="homeStatus">READY / TOUCH</span>
           <span class="label detail-line">DEMO DATA / PLACEHOLDER</span>
-          <button class="action apps-action" data-page="apps">APPS</button>
-          <button class="action ai-action" data-page="ai">AI</button>
+          <span class="label key-hint">PRESS KEY / OPEN APPS</span>
           <div class="panel" id="quickPanel">
-            <span class="label panel-title">QUICK PANEL</span>
-            <button class="panel-close" id="closePanel">^</button>
-            <span class="label brightness-caption">BRIGHTNESS</span>
-            <div class="capsule" data-brightness><div class="capsule-fill"></div></div>
-            <span class="sun">☼</span>
-            <span class="brightness-value" data-brightness-value>20%</span>
-            <div class="quick-buttons"><button data-brightness-set="15">NIGHT</button><button data-brightness-set="50">DAY</button><button data-lock>LOCK</button></div>
+            <div class="qt-grid">
+              <button class="qt" data-qt="wifi"><i>⌁</i><b>WIFI</b></button>
+              <button class="qt" data-qt="ble"><i>◌</i><b>BLE</b></button>
+              <button class="qt" data-qt="off" data-lock><i>⏻</i><b>OFF</b></button>
+              <button class="qt" data-qt="pwr"><i>⏼</i><b>PWR</b></button>
+            </div>
+            <div class="brightness-row">
+              <span class="brightness-value" data-brightness-value>20%</span>
+              <div class="capsule" data-brightness><div class="capsule-fill"></div></div>
+              <span class="sun">☼</span>
+            </div>
           </div>
         </section>
         <section class="page" id="appsPage">
-          <img class="art" src="file:///D:/图片/动漫/败犬女主/微信图片_20240918161449.png" alt="anime reference">
+          
           <div class="art-shade"></div>
           <button class="page-back" data-page="home">&lt;</button>
           <span class="label page-heading">APPS</span>
-          <span class="label page-subheading">WATCH MODULES / 04</span>
-          <div class="tiles"><button class="tile" data-app-message="ENV / AHT21 PLACEHOLDER">ENV</button><button class="tile" data-page="ai">AI</button><button class="tile" data-app-message="RTC / SETUP MODULE NEXT">RTC</button><button class="tile" data-page="settings">SET</button></div>
+          <span class="label page-subheading">SWIPE TO BROWSE</span>
+          <div class="app-list"><button class="tile" data-icon="☼" style="--icon-color:#f04b55" data-app-message="ENV / AHT21 PLACEHOLDER"><b>Environment</b><i>&gt;&gt;</i></button><button class="tile" data-icon="AI" style="--icon-color:#f08a20" data-page="ai"><b>AI Assistant</b><i>&gt;&gt;</i></button><button class="tile" data-icon="▣" style="--icon-color:#e5a51a" data-page="rtc"><b>RTC Time</b><i>&gt;&gt;</i></button><button class="tile" data-icon="+" style="--icon-color:#d7a51d" data-page="calc"><b>Calculator</b><i>&gt;&gt;</i></button><button class="tile" data-icon="◷" style="--icon-color:#9c66e8" data-page="stopwatch"><b>Stopwatch</b><i>&gt;&gt;</i></button><button class="tile" data-icon="◌" style="--icon-color:#e7b63d" data-page="countdown"><b>Countdown</b><i>&gt;&gt;</i></button><button class="tile" data-icon="♥" style="--icon-color:#ef4c52" data-page="alarm"><b>Alarm</b><i>&gt;&gt;</i></button><button class="tile" data-icon="⚙" style="--icon-color:#5174d8" data-page="settings"><b>Settings</b><i>&gt;&gt;</i></button></div>
           <span class="label app-message" id="appMessage">CHOOSE A MODULE</span>
-          <span class="label app-note">MODULES ARE PLACEHOLDERS</span>
+          <span class="label app-note">PA0 KEY OPENS APPS / SWIPE TO BROWSE</span>
+        </section>
+        <section class="page calc-page" id="calcPage">
+          <div class="art-shade"></div>
+          <button class="page-back" data-page="apps">&lt;</button>
+          <span class="label page-heading">CALC</span>
+          <span class="label page-subheading">BASIC / FOUR OPERATIONS</span>
+          <div class="calc-display" id="calcDisplay">0</div>
+          <div class="calc-grid" id="calcGrid">
+            <button class="calc-key clear" data-calc="C">C</button><button class="calc-key clear" data-calc="DEL">DEL</button><button class="calc-key operator" data-calc="/">/</button><button class="calc-key operator" data-calc="*">*</button>
+            <button class="calc-key" data-calc="7">7</button><button class="calc-key" data-calc="8">8</button><button class="calc-key" data-calc="9">9</button><button class="calc-key operator" data-calc="-">-</button>
+            <button class="calc-key" data-calc="4">4</button><button class="calc-key" data-calc="5">5</button><button class="calc-key" data-calc="6">6</button><button class="calc-key operator" data-calc="+">+</button>
+            <button class="calc-key" data-calc="1">1</button><button class="calc-key" data-calc="2">2</button><button class="calc-key" data-calc="3">3</button><button class="calc-key equals" data-calc="=">=</button>
+            <button class="calc-key" data-calc="+/-">+/-</button><button class="calc-key" data-calc="0">0</button><button class="calc-key" data-calc=".">.</button>
+          </div>
+        </section>
+        <section class="page calc-page timer-page" id="stopwatchPage">
+          <button class="page-back" data-page="apps">&lt;</button><span class="label page-heading">STOPWATCH</span><span class="label page-subheading">LOCAL / NO RTC REQUIRED</span><span class="label timer-display" id="stopwatchDisplay">00:00.0</span><div class="timer-buttons"><button class="timer-button" id="stopwatchToggle">START / PAUSE</button><button class="timer-button" id="stopwatchReset">RESET</button></div><span class="label timer-note">TIMES RESET ON REBOOT</span>
+        </section>
+        <section class="page calc-page timer-page" id="countdownPage">
+          <button class="page-back" data-page="apps">&lt;</button><span class="label page-heading">COUNTDOWN</span><span class="label page-subheading">LOCAL TIMER / DEMO</span><span class="label timer-display" id="countdownDisplay">01:00</span><div class="timer-buttons"><button class="timer-button" id="countdownToggle">START / PAUSE</button><button class="timer-button" id="countdownReset">RESET</button></div><div class="timer-small-buttons"><button class="timer-button" id="countdownAdd">+1 MIN</button><button class="timer-button" id="countdownSub">-10 SEC</button></div><span class="label timer-note">NO SOUND / VIBRATION YET</span>
+        </section>
+        <section class="page state-page" id="alarmPage">
+          <button class="page-back" data-page="apps">&lt;</button><span class="label page-heading">ALARM</span><span class="label state-kicker">FRAMEWORK / SILENT</span><span class="label state-title">07:30</span><span class="label state-copy">ALARM STORAGE IS RESERVED.<br>BUZZER OR VIBRATION IS NOT CONNECTED.</span><span class="label state-footer">SILENT MODE / NOT ENABLED</span>
+        </section>
+        <section class="page state-page" id="rtcPage">
+          <button class="page-back" data-page="apps">&lt;</button><span class="label page-heading">RTC TIME</span><span class="label state-kicker">HARDWARE MODULE / PENDING</span><span class="label state-title">12:00:00</span><span class="label state-copy">ENABLE RTC + LSE IN CUBEMX FIRST.<br>THEN THIS PAGE CAN WRITE DATE AND TIME.</span><span class="label state-footer">RTC SETUP FRAMEWORK</span>
         </section>
         <section class="page state-page" id="aiPage">
           <img class="art" src="file:///D:/图片/动漫/败犬女主/微信图片_202410042154392.jpg" alt="anime reference">
@@ -150,7 +205,7 @@ body {
           <span class="label state-footer">DEMO / ESP32 NOT CONNECTED</span>
         </section>
         <section class="page state-page" id="alertPage">
-          <img class="art" src="file:///D:/图片/动漫/败犬女主/QQ图片20240812161930.png" alt="anime reference">
+          
           <div class="art-shade"></div>
           <button class="page-back" data-page="home">&lt;</button>
           <span class="label page-heading">NOTICE</span>
@@ -184,7 +239,7 @@ body {
 </div>
 <script>
 (function () {
-  const pages = { home: document.getElementById('homePage'), apps: document.getElementById('appsPage'), ai: document.getElementById('aiPage'), alert: document.getElementById('alertPage'), settings: document.getElementById('settingsPage') };
+  const pages = { home: document.getElementById('homePage'), apps: document.getElementById('appsPage'), calc: document.getElementById('calcPage'), stopwatch: document.getElementById('stopwatchPage'), countdown: document.getElementById('countdownPage'), alarm: document.getElementById('alarmPage'), rtc: document.getElementById('rtcPage'), ai: document.getElementById('aiPage'), alert: document.getElementById('alertPage'), settings: document.getElementById('settingsPage') };
   const toolbarButtons = Array.from(document.querySelectorAll('#toolbar button[data-page]'));
   const screen = document.getElementById('watchScreen');
   const panel = document.getElementById('quickPanel');
@@ -193,17 +248,56 @@ body {
   let brightness = 20;
   let dragging = false;
   let startY = null;
+  let calcValue = '0';
+  let calcLeft = 0;
+  let calcOperator = '';
+  let calcEntering = false;
+  let stopwatchTicks = 0;
+  let stopwatchRunning = false;
+  let countdownSeconds = 60;
+  let countdownRunning = false;
   function showPage(name) { Object.keys(pages).forEach(key => pages[key].classList.toggle('active', key === name)); toolbarButtons.forEach(button => button.classList.toggle('active', button.dataset.page === name)); panel.classList.remove('open'); }
-  function setBrightness(value) { brightness = Math.max(5, Math.min(100, Math.round(value))); capsules.forEach(capsule => capsule.querySelector('.capsule-fill').style.height = brightness + '%'); values.forEach(valueLabel => valueLabel.textContent = brightness + '%'); }
+  function setBrightness(value) { brightness = Math.max(5, Math.min(100, Math.round(value))); capsules.forEach(capsule => capsule.querySelector('.capsule-fill').style.width = brightness + '%'); values.forEach(valueLabel => valueLabel.textContent = brightness + '%'); }
   function panelOpen(open) { panel.classList.toggle('open', open === undefined ? !panel.classList.contains('open') : open); }
-  function brightnessFromPointer(event, capsule) { const rect = capsule.getBoundingClientRect(); setBrightness(5 + (1 - ((event.clientY - rect.top) / rect.height)) * 95); }
+  function brightnessFromPointer(event, capsule) { const rect = capsule.getBoundingClientRect(); setBrightness(5 + ((event.clientX - rect.left) / rect.width) * 95); }
+  function refreshCalc() { document.getElementById('calcDisplay').textContent = calcValue; }
+  function resetCalc() { calcValue = '0'; calcLeft = 0; calcOperator = ''; calcEntering = false; refreshCalc(); }
+  function applyCalcOperator() {
+    const right = Number(calcValue);
+    let result = calcLeft;
+    if (calcOperator === '+') result += right;
+    if (calcOperator === '-') result -= right;
+    if (calcOperator === '*') result *= right;
+    if (calcOperator === '/') result = right === 0 ? NaN : result / right;
+    calcValue = Number.isFinite(result) ? String(Number(result.toPrecision(9))) : 'ERROR';
+  }
+  function refreshStopwatch() { const m = Math.floor(stopwatchTicks / 600); const s = Math.floor(stopwatchTicks / 10) % 60; const d = stopwatchTicks % 10; document.getElementById('stopwatchDisplay').textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + d; }
+  function refreshCountdown() { document.getElementById('countdownDisplay').textContent = String(Math.floor(countdownSeconds / 60)).padStart(2, '0') + ':' + String(countdownSeconds % 60).padStart(2, '0'); }
+  setInterval(() => { if (stopwatchRunning) { stopwatchTicks++; refreshStopwatch(); } }, 100);
+  setInterval(() => { if (countdownRunning && countdownSeconds > 0) { countdownSeconds--; refreshCountdown(); if (countdownSeconds === 0) countdownRunning = false; } }, 1000);
+  function calcInput(input) {
+    if (input === 'C') return resetCalc();
+    if (calcValue === 'ERROR' && input !== 'C') return resetCalc();
+    if (input === 'DEL') { calcValue = !calcEntering || calcValue.length <= 1 ? '0' : calcValue.slice(0, -1); calcEntering = true; return refreshCalc(); }
+    if (input === '.') { if (!calcEntering) calcValue = '0.'; else if (!calcValue.includes('.')) calcValue += '.'; calcEntering = true; return refreshCalc(); }
+    if (input === '+/-') { if (calcValue !== '0') calcValue = calcValue.startsWith('-') ? calcValue.slice(1) : '-' + calcValue; return refreshCalc(); }
+    if (/^\d$/.test(input)) { calcValue = !calcEntering || calcValue === '0' ? input : calcValue + input; calcEntering = true; return refreshCalc(); }
+    if (/^[+\-*/]$/.test(input)) { if (calcOperator && calcEntering) applyCalcOperator(); else calcLeft = Number(calcValue); calcOperator = input; calcEntering = false; return refreshCalc(); }
+    if (input === '=' && calcOperator) { applyCalcOperator(); calcOperator = ''; calcEntering = false; refreshCalc(); }
+  }
   toolbarButtons.forEach(button => button.addEventListener('click', () => showPage(button.dataset.page)));
   document.querySelectorAll('[data-page]').forEach(button => { if (!button.closest('#toolbar')) button.addEventListener('click', () => showPage(button.dataset.page)); });
   document.getElementById('toggleQuick').addEventListener('click', () => { showPage('home'); panelOpen(); });
-  document.getElementById('closePanel').addEventListener('click', () => panelOpen(false));
-  document.querySelectorAll('[data-brightness-set]').forEach(button => button.addEventListener('click', () => setBrightness(button.dataset.brightnessSet)));
+  document.querySelectorAll('.qt').forEach(button => button.addEventListener('click', () => { panelOpen(false); if (button.dataset.qt === 'off') document.getElementById('homeStatus').textContent = 'LOCK / PLACEHOLDER'; }));
   document.querySelectorAll('[data-lock]').forEach(button => button.addEventListener('click', () => { document.getElementById('homeStatus').textContent = 'LOCK / PLACEHOLDER'; }));
   document.querySelectorAll('[data-app-message]').forEach(button => button.addEventListener('click', () => { document.getElementById('appMessage').textContent = button.dataset.appMessage; }));
+  document.querySelectorAll('[data-calc]').forEach(button => button.addEventListener('click', () => calcInput(button.dataset.calc)));
+  document.getElementById('stopwatchToggle').addEventListener('click', () => { stopwatchRunning = !stopwatchRunning; });
+  document.getElementById('stopwatchReset').addEventListener('click', () => { stopwatchTicks = 0; stopwatchRunning = false; refreshStopwatch(); });
+  document.getElementById('countdownToggle').addEventListener('click', () => { if (countdownSeconds === 0) countdownSeconds = 60; countdownRunning = !countdownRunning; refreshCountdown(); });
+  document.getElementById('countdownReset').addEventListener('click', () => { countdownSeconds = 60; countdownRunning = false; refreshCountdown(); });
+  document.getElementById('countdownAdd').addEventListener('click', () => { countdownSeconds = Math.min(5940, countdownSeconds + 60); refreshCountdown(); });
+  document.getElementById('countdownSub').addEventListener('click', () => { countdownSeconds = Math.max(0, countdownSeconds - 10); refreshCountdown(); });
   document.getElementById('aiAction').addEventListener('click', () => { document.querySelector('#aiPage .state-title').textContent = 'LISTENING...'; });
   document.getElementById('alertAction').addEventListener('click', () => { document.querySelector('#alertPage .state-title').textContent = 'ALL CLEAR'; });
   capsules.forEach(capsule => { capsule.addEventListener('pointerdown', event => { dragging = true; capsule.setPointerCapture(event.pointerId); brightnessFromPointer(event, capsule); }); capsule.addEventListener('pointermove', event => { if (dragging) brightnessFromPointer(event, capsule); }); capsule.addEventListener('pointerup', () => { dragging = false; }); capsule.addEventListener('pointercancel', () => { dragging = false; }); });

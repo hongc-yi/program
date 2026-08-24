@@ -14,6 +14,7 @@ extern "C" {
 	
 void Key_Port_Init(void);
 void Key_Interrupt_Callback(void);
+uint8_t Key_Get_Pending(void);
 uint8_t KeyScan(uint8_t mode);
 
 
