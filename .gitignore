@@ -23,5 +23,8 @@
 *.bak-*
 build_log*.txt
 
+# 开发日志（本地保留，不入库）
+9.OV_Watch/DEV_LOG_*.md
+
 # 编辑器配置
 .vscode/
