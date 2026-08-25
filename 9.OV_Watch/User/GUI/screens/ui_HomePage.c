@@ -11,8 +11,6 @@ static lv_obj_t * ui_AppsPage = NULL;
 static lv_obj_t * ui_AIPage = NULL;
 static lv_obj_t * ui_CalcPage = NULL;
 static lv_obj_t * ui_StopwatchPage = NULL;
-static lv_obj_t * ui_CountdownPage = NULL;
-static lv_obj_t * ui_AlarmPage = NULL;
 static lv_obj_t * ui_RtcPage = NULL;
 static lv_obj_t * ui_NoticePage = NULL;
 static lv_obj_t * ui_SettingsPage = NULL;
@@ -22,8 +20,8 @@ static lv_obj_t * ui_status_label = NULL;
 static lv_obj_t * ui_detail_label = NULL;
 static lv_obj_t * ui_temperature_label = NULL;
 static lv_obj_t * ui_humidity_label = NULL;
-static lv_obj_t * ui_steps_label = NULL;
 static lv_obj_t * ui_app_status_label = NULL;
+static lv_obj_t * ui_timeout_value = NULL;
 static lv_obj_t * ui_brightness_slider = NULL;
 static lv_obj_t * ui_brightness_value = NULL;
 static lv_obj_t * ui_quick_panel = NULL;
@@ -32,13 +30,37 @@ static lv_obj_t * ui_quick_brightness_value = NULL;
 
 static lv_obj_t * ui_calc_display = NULL;
 static lv_obj_t * ui_stopwatch_display = NULL;
-static lv_obj_t * ui_countdown_display = NULL;
+static lv_obj_t * ui_timer_mode_label = NULL;
+static lv_obj_t * ui_timer_status_label = NULL;
+static lv_obj_t * ui_home_clock_label = NULL;
+static lv_obj_t * ui_home_date_label = NULL;
+static lv_obj_t * ui_time_clock_label = NULL;
+static lv_obj_t * ui_time_status_label = NULL;
 static lv_timer_t * ui_stopwatch_timer = NULL;
-static lv_timer_t * ui_countdown_timer = NULL;
+static lv_timer_t * ui_time_timer = NULL;
+static lv_obj_t * ui_timer_control_button = NULL;
+static lv_obj_t * ui_timer_adjust_up_button = NULL;
+static lv_obj_t * ui_timer_adjust_down_button = NULL;
+static uint32_t ui_screen_timeout_seconds = 30U;
+static uint32_t ui_last_activity_tick = 0U;
 static uint32_t ui_stopwatch_ticks = 0;
+static uint32_t ui_stopwatch_last_tick = 0;
+static uint32_t ui_stopwatch_accumulated_ms = 0;
 static uint32_t ui_countdown_seconds = 60;
+static uint32_t ui_countdown_last_tick = 0;
+static uint32_t ui_countdown_accumulated_ms = 0;
+static uint32_t ui_alarm_seconds = 7U * 3600U + 30U * 60U;
+static uint32_t ui_alarm_last_clock_seconds = 0;
+static bool ui_alarm_last_clock_valid = false;
+static uint32_t ui_clock_seconds = 9U * 3600U + 41U * 60U;
+static uint32_t ui_clock_base_tick = 0;
+static uint32_t ui_time_edit_seconds = 9U * 3600U + 41U * 60U;
+static uint8_t ui_timer_mode = 0;
 static bool ui_stopwatch_running = false;
 static bool ui_countdown_running = false;
+static bool ui_alarm_enabled = false;
+static bool ui_alarm_ringing = false;
+static bool ui_time_editing = false;
 static bool ui_quick_panel_visible = false;
 static bool ui_screen_off = false;
 
@@ -52,7 +74,23 @@ static void ui_calc_button_event(lv_event_t * event);
 static void ui_calc_back_event(lv_event_t * event);
 static void ui_calc_reset(void);
 static void ui_stopwatch_timer_cb(lv_timer_t * timer);
-static void ui_countdown_timer_cb(lv_timer_t * timer);
+static void ui_time_timer_cb(lv_timer_t * timer);
+static void ui_timer_mode_event(lv_event_t * event);
+static void ui_timer_control_event(lv_event_t * event);
+static void ui_timer_reset_event(lv_event_t * event);
+static void ui_timer_adjust_event(lv_event_t * event);
+static void ui_time_adjust_event(lv_event_t * event);
+static void ui_time_apply_event(lv_event_t * event);
+static void ui_time_back_event(lv_event_t * event);
+static void ui_timeout_adjust_event(lv_event_t * event);
+static void ui_timer_control_action(void);
+static void ui_time_apply_action(void);
+static void ui_screen_timeout_refresh(void);
+static void ui_screen_timeout_adjust(int32_t delta);
+static void ui_screen_timeout_check(void);
+static void ui_alarm_check(uint32_t current);
+static void ui_timer_refresh(void);
+static void ui_time_refresh(void);
 
 static lv_obj_t * ui_create_label(lv_obj_t * parent, const char * text,
                                   lv_color_t color, const lv_font_t * font)
@@ -246,6 +284,66 @@ void ui_open_apps(void)
     if(ui_AppsPage && lv_scr_act() == ui_HomePage) lv_scr_load(ui_AppsPage);
 }
 
+void ui_handle_key_confirm(void)
+{
+    if(ui_screen_off) {
+        LCD_Open_Light();
+        ui_screen_off = false;
+        ui_screen_timeout_refresh();
+        return;
+    }
+
+    ui_screen_timeout_refresh();
+    if(lv_scr_act() == ui_StopwatchPage) {
+        ui_timer_control_action();
+    } else if(lv_scr_act() == ui_RtcPage) {
+        ui_time_apply_action();
+    } else if(lv_scr_act() == ui_AppsPage) {
+        lv_scr_load(ui_HomePage);
+    } else if(lv_scr_act() == ui_HomePage) {
+        ui_open_apps();
+    }
+}
+
+void ui_set_time_from_network(uint8_t hour, uint8_t minute, uint8_t second)
+{
+    if(hour >= 24U || minute >= 60U || second >= 60U) return;
+    ui_clock_seconds = (uint32_t)hour * 3600U + (uint32_t)minute * 60U + second;
+    ui_clock_base_tick = HAL_GetTick();
+    ui_time_edit_seconds = ui_clock_seconds;
+    ui_time_editing = false;
+    ui_alarm_last_clock_valid = false;
+    ui_alarm_ringing = false;
+    ui_time_refresh();
+}
+
+static void ui_screen_timeout_refresh(void)
+{
+    ui_last_activity_tick = HAL_GetTick();
+}
+
+static void ui_screen_timeout_adjust(int32_t delta)
+{
+    int32_t value = (int32_t)ui_screen_timeout_seconds + delta;
+    if(value < 0) value = 0;
+    if(value > 60) value = 60;
+    ui_screen_timeout_seconds = (uint32_t)value;
+    ui_screen_timeout_refresh();
+    if(ui_timeout_value) {
+        if(ui_screen_timeout_seconds == 0U) lv_label_set_text(ui_timeout_value, "OFF");
+        else lv_label_set_text_fmt(ui_timeout_value, "%lus", (unsigned long)ui_screen_timeout_seconds);
+    }
+}
+
+static void ui_screen_timeout_check(void)
+{
+    if(ui_screen_off || ui_screen_timeout_seconds == 0U) return;
+    if((HAL_GetTick() - ui_last_activity_tick) >= ui_screen_timeout_seconds * 1000U) {
+        LCD_Close_Light();
+        ui_screen_off = true;
+    }
+}
+
 static void ui_apps_back_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
@@ -270,12 +368,6 @@ static void ui_ai_app_event(lv_event_t * event)
     lv_scr_load(ui_AIPage);
 }
 
-static void ui_rtc_event(lv_event_t * event)
-{
-    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    lv_label_set_text(ui_app_status_label, "RTC / SETUP MODULE NEXT");
-}
-
 static void ui_settings_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
@@ -293,6 +385,12 @@ static void ui_calc_app_event(lv_event_t * event)
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
     ui_calc_reset();
     lv_scr_load(ui_CalcPage);
+}
+
+static void ui_timeout_adjust_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_screen_timeout_adjust((int32_t)(intptr_t)lv_obj_get_user_data(lv_event_get_target(event)));
 }
 
 static void ui_brightness_event(lv_event_t * event)
@@ -453,115 +551,288 @@ static void ui_calc_back_event(lv_event_t * event)
     lv_scr_load(ui_AppsPage);
 }
 
-static void ui_stopwatch_timer_cb(lv_timer_t * timer)
+static void ui_button_set_text(lv_obj_t * button, const char * text)
 {
-    LV_UNUSED(timer);
-    ui_stopwatch_ticks++;
-    if(ui_stopwatch_display) {
+    lv_obj_t * label;
+    if(!button) return;
+    label = lv_obj_get_child(button, 0);
+    if(label) lv_label_set_text(label, text);
+}
+
+static void ui_time_refresh(void)
+{
+    uint32_t elapsed = (HAL_GetTick() - ui_clock_base_tick) / 1000U;
+    uint32_t seconds = (ui_clock_seconds + elapsed) % 86400U;
+    uint32_t display_seconds = ui_time_editing ? ui_time_edit_seconds : seconds;
+    uint32_t hours = display_seconds / 3600U;
+    uint32_t minutes = (display_seconds / 60U) % 60U;
+
+    if(ui_home_clock_label) {
+        lv_label_set_text_fmt(ui_home_clock_label, "%02lu:%02lu", (unsigned long)hours, (unsigned long)minutes);
+    }
+    if(ui_time_clock_label) {
+        lv_label_set_text_fmt(ui_time_clock_label, "%02lu:%02lu:%02lu",
+                              (unsigned long)hours, (unsigned long)minutes,
+                              (unsigned long)(display_seconds % 60U));
+    }
+}
+
+static void ui_timer_refresh(void)
+{
+    if(!ui_stopwatch_display) return;
+
+    if(ui_timer_mode == 0U) {
         lv_label_set_text_fmt(ui_stopwatch_display, "%02lu:%02lu.%01lu",
                               (unsigned long)(ui_stopwatch_ticks / 600U),
                               (unsigned long)((ui_stopwatch_ticks / 10U) % 60U),
                               (unsigned long)(ui_stopwatch_ticks % 10U));
+        if(ui_timer_mode_label) lv_label_set_text(ui_timer_mode_label, "STOPWATCH");
+        if(ui_timer_status_label) lv_label_set_text(ui_timer_status_label, ui_stopwatch_running ? "RUNNING" : "PAUSED");
+        ui_button_set_text(ui_timer_control_button, ui_stopwatch_running ? "PAUSE" : "START");
+        if(ui_timer_adjust_up_button) lv_obj_add_flag(ui_timer_adjust_up_button, LV_OBJ_FLAG_HIDDEN);
+        if(ui_timer_adjust_down_button) lv_obj_add_flag(ui_timer_adjust_down_button, LV_OBJ_FLAG_HIDDEN);
+    } else if(ui_timer_mode == 1U) {
+        lv_label_set_text_fmt(ui_stopwatch_display, "%02lu:%02lu",
+                              (unsigned long)(ui_countdown_seconds / 60U),
+                              (unsigned long)(ui_countdown_seconds % 60U));
+        if(ui_timer_mode_label) lv_label_set_text(ui_timer_mode_label, "COUNTDOWN");
+        if(ui_timer_status_label) lv_label_set_text(ui_timer_status_label, ui_countdown_running ? "RUNNING" : "PAUSED");
+        ui_button_set_text(ui_timer_control_button, ui_countdown_running ? "PAUSE" : "START");
+        ui_button_set_text(ui_timer_adjust_up_button, "+1 MIN");
+        ui_button_set_text(ui_timer_adjust_down_button, "-10 SEC");
+        if(ui_timer_adjust_up_button) lv_obj_clear_flag(ui_timer_adjust_up_button, LV_OBJ_FLAG_HIDDEN);
+        if(ui_timer_adjust_down_button) lv_obj_clear_flag(ui_timer_adjust_down_button, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_label_set_text_fmt(ui_stopwatch_display, "%02lu:%02lu",
+                              (unsigned long)(ui_alarm_seconds / 3600U),
+                              (unsigned long)((ui_alarm_seconds / 60U) % 60U));
+        if(ui_timer_mode_label) lv_label_set_text(ui_timer_mode_label, "ALARM");
+        if(ui_timer_status_label) {
+            if(ui_alarm_ringing) lv_label_set_text(ui_timer_status_label, "ALARM DUE");
+            else if(ui_alarm_enabled) lv_label_set_text(ui_timer_status_label, "ARMED");
+            else lv_label_set_text(ui_timer_status_label, "DISABLED");
+        }
+        ui_button_set_text(ui_timer_control_button, ui_alarm_enabled ? "DISARM" : "ARM");
+        ui_button_set_text(ui_timer_adjust_up_button, "+1 HOUR");
+        ui_button_set_text(ui_timer_adjust_down_button, "-10 MIN");
+        if(ui_timer_adjust_up_button) lv_obj_clear_flag(ui_timer_adjust_up_button, LV_OBJ_FLAG_HIDDEN);
+        if(ui_timer_adjust_down_button) lv_obj_clear_flag(ui_timer_adjust_down_button, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
-static void ui_countdown_timer_cb(lv_timer_t * timer)
+static void ui_stopwatch_timer_cb(lv_timer_t * timer)
 {
+    uint32_t now;
+    uint32_t elapsed;
+    uint32_t current;
     LV_UNUSED(timer);
-    if(ui_countdown_seconds > 0U) ui_countdown_seconds--;
-    if(ui_countdown_display) {
-        lv_label_set_text_fmt(ui_countdown_display, "%02lu:%02lu",
-                              (unsigned long)(ui_countdown_seconds / 60U),
-                              (unsigned long)(ui_countdown_seconds % 60U));
+
+    now = HAL_GetTick();
+    current = (ui_clock_seconds + ((now - ui_clock_base_tick) / 1000U)) % 86400U;
+
+    if(ui_stopwatch_running) {
+        if(ui_stopwatch_last_tick == 0U) ui_stopwatch_last_tick = now;
+        elapsed = now - ui_stopwatch_last_tick;
+        ui_stopwatch_last_tick = now;
+        ui_stopwatch_accumulated_ms += elapsed;
+        ui_stopwatch_ticks = ui_stopwatch_accumulated_ms / 100U;
     }
-    if(ui_countdown_seconds == 0U) {
-        ui_countdown_running = false;
-        if(ui_countdown_timer) lv_timer_pause(ui_countdown_timer);
+
+    if(ui_countdown_running) {
+        if(ui_countdown_last_tick == 0U) ui_countdown_last_tick = now;
+        elapsed = now - ui_countdown_last_tick;
+        ui_countdown_last_tick = now;
+        ui_countdown_accumulated_ms += elapsed;
+        while(ui_countdown_accumulated_ms >= 1000U && ui_countdown_seconds > 0U) {
+            ui_countdown_accumulated_ms -= 1000U;
+            ui_countdown_seconds--;
+        }
+        if(ui_countdown_seconds == 0U) {
+            ui_countdown_running = false;
+            ui_countdown_last_tick = 0U;
+            ui_countdown_accumulated_ms = 0U;
+        }
     }
+
+    ui_alarm_check(current);
+    ui_timer_refresh();
+}
+
+static void ui_time_timer_cb(lv_timer_t * timer)
+{
+    uint32_t current;
+    LV_UNUSED(timer);
+    ui_time_refresh();
+    ui_screen_timeout_check();
+    current = (ui_clock_seconds + ((HAL_GetTick() - ui_clock_base_tick) / 1000U)) % 86400U;
+    ui_alarm_check(current);
+    if(ui_alarm_ringing) ui_timer_refresh();
 }
 
 static void ui_stopwatch_app_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    ui_stopwatch_ticks = 0;
-    ui_stopwatch_running = false;
-    if(ui_stopwatch_timer) lv_timer_pause(ui_stopwatch_timer);
+    ui_timer_mode = 0U;
+    ui_timer_refresh();
     lv_scr_load(ui_StopwatchPage);
-}
-
-static void ui_countdown_app_event(lv_event_t * event)
-{
-    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    ui_countdown_seconds = 60;
-    ui_countdown_running = false;
-    if(ui_countdown_timer) lv_timer_pause(ui_countdown_timer);
-    lv_scr_load(ui_CountdownPage);
-}
-
-static void ui_alarm_app_event(lv_event_t * event)
-{
-    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    lv_scr_load(ui_AlarmPage);
 }
 
 static void ui_rtc_app_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_time_edit_seconds = (ui_clock_seconds + ((HAL_GetTick() - ui_clock_base_tick) / 1000U)) % 86400U;
+    ui_time_editing = true;
+    ui_time_refresh();
     lv_scr_load(ui_RtcPage);
 }
 
-static void ui_stopwatch_toggle_event(lv_event_t * event)
+static void ui_timer_mode_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    ui_stopwatch_running = !ui_stopwatch_running;
+    ui_timer_mode = (uint8_t)(uintptr_t)lv_obj_get_user_data(lv_event_get_target(event));
+    ui_alarm_ringing = false;
+    ui_timer_refresh();
+}
+
+static void ui_timer_control_action(void)
+{
+    uint32_t now = HAL_GetTick();
+
+    if(ui_timer_mode == 0U) {
+        ui_stopwatch_running = !ui_stopwatch_running;
+        ui_stopwatch_last_tick = ui_stopwatch_running ? now : 0U;
+    } else if(ui_timer_mode == 1U) {
+        if(ui_countdown_seconds == 0U) ui_countdown_seconds = 60U;
+        ui_countdown_running = !ui_countdown_running;
+        ui_countdown_last_tick = ui_countdown_running ? now : 0U;
+    } else {
+        ui_alarm_enabled = !ui_alarm_enabled;
+        ui_alarm_ringing = false;
+        ui_alarm_last_clock_valid = false;
+    }
     if(ui_stopwatch_timer) {
-        if(ui_stopwatch_running) lv_timer_resume(ui_stopwatch_timer);
+        if(ui_stopwatch_running || ui_countdown_running || ui_alarm_enabled) lv_timer_resume(ui_stopwatch_timer);
         else lv_timer_pause(ui_stopwatch_timer);
     }
+    ui_timer_refresh();
 }
 
-static void ui_stopwatch_reset_event(lv_event_t * event)
+static void ui_timer_control_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    ui_stopwatch_ticks = 0;
-    ui_stopwatch_running = false;
-    if(ui_stopwatch_timer) lv_timer_pause(ui_stopwatch_timer);
-    if(ui_stopwatch_display) lv_label_set_text(ui_stopwatch_display, "00:00.0");
+    ui_timer_control_action();
 }
 
-static void ui_countdown_toggle_event(lv_event_t * event)
+static void ui_timer_reset_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    if(ui_countdown_seconds == 0U) ui_countdown_seconds = 60U;
-    ui_countdown_running = !ui_countdown_running;
-    if(ui_countdown_timer) {
-        if(ui_countdown_running) lv_timer_resume(ui_countdown_timer);
-        else lv_timer_pause(ui_countdown_timer);
+    if(ui_timer_mode == 0U) {
+        ui_stopwatch_ticks = 0;
+        ui_stopwatch_accumulated_ms = 0U;
+        ui_stopwatch_last_tick = 0U;
+        ui_stopwatch_running = false;
+    } else if(ui_timer_mode == 1U) {
+        ui_countdown_seconds = 60U;
+        ui_countdown_accumulated_ms = 0U;
+        ui_countdown_last_tick = 0U;
+        ui_countdown_running = false;
+    } else {
+        ui_alarm_enabled = false;
+        ui_alarm_ringing = false;
     }
+    ui_timer_refresh();
 }
 
-static void ui_countdown_add_event(lv_event_t * event)
+static void ui_timer_adjust_event(lv_event_t * event)
 {
+    int32_t delta;
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    if(ui_countdown_seconds <= 5940U) ui_countdown_seconds += 60U;
-    if(ui_countdown_display) lv_label_set_text_fmt(ui_countdown_display, "%02lu:%02lu", (unsigned long)(ui_countdown_seconds / 60U), (unsigned long)(ui_countdown_seconds % 60U));
+    delta = (int32_t)(intptr_t)lv_obj_get_user_data(lv_event_get_target(event));
+    if(ui_timer_mode == 1U) {
+        if(delta > 0 && ui_countdown_seconds <= 5940U) ui_countdown_seconds += (uint32_t)delta;
+        else if(delta < 0 && ui_countdown_seconds >= (uint32_t)(-delta)) ui_countdown_seconds -= (uint32_t)(-delta);
+        ui_countdown_accumulated_ms = 0U;
+    } else if(ui_timer_mode == 2U) {
+        int32_t alarm_seconds = (int32_t)ui_alarm_seconds + delta * 60;
+        while(alarm_seconds < 0) alarm_seconds += 86400;
+        while(alarm_seconds >= 86400) alarm_seconds -= 86400;
+        ui_alarm_seconds = (uint32_t)alarm_seconds;
+        ui_alarm_last_clock_valid = false;
+        ui_alarm_ringing = false;
+    } else return;
+    ui_timer_refresh();
 }
 
-static void ui_countdown_sub_event(lv_event_t * event)
+static void ui_time_adjust_event(lv_event_t * event)
 {
+    int32_t delta;
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    if(ui_countdown_seconds > 10U) ui_countdown_seconds -= 10U;
-    else ui_countdown_seconds = 0U;
-    if(ui_countdown_display) lv_label_set_text_fmt(ui_countdown_display, "%02lu:%02lu", (unsigned long)(ui_countdown_seconds / 60U), (unsigned long)(ui_countdown_seconds % 60U));
+    delta = (int32_t)(intptr_t)lv_obj_get_user_data(lv_event_get_target(event));
+    {
+        int32_t edit_seconds = (int32_t)ui_time_edit_seconds + delta;
+        while(edit_seconds < 0) edit_seconds += 86400;
+        while(edit_seconds >= 86400) edit_seconds -= 86400;
+        ui_time_edit_seconds = (uint32_t)edit_seconds;
+    }
+    if(ui_time_status_label) lv_label_set_text_fmt(ui_time_status_label, "EDIT %02lu:%02lu",
+        (unsigned long)(ui_time_edit_seconds / 3600U),
+        (unsigned long)((ui_time_edit_seconds / 60U) % 60U));
+    ui_time_refresh();
 }
 
-static void ui_countdown_reset_event(lv_event_t * event)
+static void ui_alarm_check(uint32_t current)
+{
+    uint32_t clock_delta;
+    uint32_t alarm_distance;
+
+    if(!ui_alarm_enabled) {
+        ui_alarm_last_clock_valid = false;
+        return;
+    }
+
+    if(!ui_alarm_last_clock_valid) {
+        ui_alarm_last_clock_seconds = current;
+        ui_alarm_last_clock_valid = true;
+        if(current == ui_alarm_seconds) ui_alarm_ringing = true;
+        return;
+    }
+
+    clock_delta = (current + 86400U - ui_alarm_last_clock_seconds) % 86400U;
+    alarm_distance = (ui_alarm_seconds + 86400U - ui_alarm_last_clock_seconds) % 86400U;
+    if(current == ui_alarm_seconds ||
+       (clock_delta > 0U && alarm_distance > 0U && alarm_distance <= clock_delta)) {
+        ui_alarm_ringing = true;
+    }
+    ui_alarm_last_clock_seconds = current;
+}
+
+static void ui_time_apply_action(void)
+{
+    ui_clock_seconds = ui_time_edit_seconds;
+    ui_clock_base_tick = HAL_GetTick();
+    ui_time_editing = false;
+    ui_alarm_last_clock_valid = false;
+    if(ui_time_status_label) lv_label_set_text(ui_time_status_label, "TIME APPLIED");
+    ui_time_refresh();
+}
+
+static void ui_time_apply_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    ui_countdown_seconds = 60U;
-    ui_countdown_running = false;
-    if(ui_countdown_timer) lv_timer_pause(ui_countdown_timer);
-    if(ui_countdown_display) lv_label_set_text(ui_countdown_display, "01:00");
+    ui_time_apply_action();
+}
+
+static void ui_time_back_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_time_editing = false;
+    ui_time_refresh();
+    lv_scr_load(ui_AppsPage);
+}
+
+static void ui_quick_panel_set_y(void * var, int32_t value)
+{
+    lv_obj_set_y((lv_obj_t *)var, (lv_coord_t)value);
 }
 
 static void ui_quick_panel_anim(int32_t end_y)
@@ -573,14 +844,15 @@ static void ui_quick_panel_anim(int32_t end_y)
     lv_anim_init(&animation);
     lv_anim_set_var(&animation, ui_quick_panel);
     lv_anim_set_values(&animation, lv_obj_get_y(ui_quick_panel), end_y);
-    lv_anim_set_time(&animation, 180);
-    lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
-    lv_anim_set_exec_cb(&animation, (lv_anim_exec_xcb_t)lv_obj_set_y);
+    lv_anim_set_time(&animation, 120);
+    lv_anim_set_path_cb(&animation, lv_anim_path_ease_in_out);
+    lv_anim_set_exec_cb(&animation, ui_quick_panel_set_y);
     lv_anim_start(&animation);
 }
 
 static void ui_quick_panel_close(void)
 {
+    if(!ui_quick_panel || !ui_quick_panel_visible) return;
     ui_quick_panel_visible = false;
     ui_quick_panel_anim(-160);
 }
@@ -643,10 +915,12 @@ void ui_handle_touch(lv_coord_t x, lv_coord_t y)
     if(ui_screen_off) {
         LCD_Open_Light();
         ui_screen_off = false;
+        ui_screen_timeout_refresh();
         ui_quick_panel_close();
         return;
     }
 
+    ui_screen_timeout_refresh();
     if(lv_scr_act() == ui_HomePage) {
         /* Only dismiss the panel when the touch is OUTSIDE the panel area,
            so the toggle buttons and the brightness slider keep working. */
@@ -660,12 +934,8 @@ void ui_HomePage_screen_init(void)
     lv_obj_t * title;
     lv_obj_t * divider;
     lv_obj_t * section;
-    lv_obj_t * clock;
-    lv_obj_t * date;
-    lv_obj_t * steps_card;
     lv_obj_t * env_card;
     lv_obj_t * label;
-    lv_obj_t * progress;
 
     ui_HomePage = lv_obj_create(NULL);
     ui_style_screen(ui_HomePage);
@@ -685,38 +955,25 @@ void ui_HomePage_screen_init(void)
 
     section = ui_create_label(ui_HomePage, "WATCH STATUS / DEMO", lv_color_hex(0x8CECF5), &lv_font_montserrat_14);
     lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 50);
-    clock = ui_create_label(ui_HomePage, "09:41", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
-    lv_obj_align(clock, LV_ALIGN_TOP_MID, 0, 68);
-    date = ui_create_label(ui_HomePage, "FRI 21 AUG / 24 C", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-    lv_obj_align(date, LV_ALIGN_TOP_MID, 0, 111);
+    ui_home_clock_label = ui_create_label(ui_HomePage, "09:41", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
+    lv_obj_align(ui_home_clock_label, LV_ALIGN_TOP_MID, 0, 68);
+    ui_home_date_label = ui_create_label(ui_HomePage, "MANUAL TIME / 24 C", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
+    lv_obj_align(ui_home_date_label, LV_ALIGN_TOP_MID, 0, 111);
+    ui_clock_base_tick = HAL_GetTick();
+    ui_screen_timeout_refresh();
 
-    steps_card = ui_create_card(ui_HomePage, 14, 143, 102, 68);
-    label = ui_create_label(steps_card, "STEP QUEST", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
-    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 9, 8);
-    ui_steps_label = ui_create_label(steps_card, "4.2K", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
-    lv_obj_align(ui_steps_label, LV_ALIGN_TOP_LEFT, 9, 29);
-    progress = lv_bar_create(steps_card);
-    lv_obj_set_pos(progress, 9, 55);
-    lv_obj_set_size(progress, 84, 5);
-    lv_bar_set_range(progress, 0, 100);
-    lv_bar_set_value(progress, 76, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(progress, lv_color_hex(0x17284A), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(progress, lv_color_hex(0x77E8EF), LV_PART_INDICATOR);
-    lv_obj_set_style_radius(progress, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_radius(progress, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
-
-    env_card = ui_create_card(ui_HomePage, 124, 143, 102, 68);
-    label = ui_create_label(env_card, "AHT21", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
-    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 9, 8);
-    ui_temperature_label = ui_create_label(env_card, "24 C", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
-    lv_obj_align(ui_temperature_label, LV_ALIGN_TOP_LEFT, 9, 29);
-    ui_humidity_label = ui_create_label(env_card, "48 %", lv_color_hex(0xFFD27A), &lv_font_montserrat_14);
-    lv_obj_align(ui_humidity_label, LV_ALIGN_TOP_LEFT, 9, 51);
+    env_card = ui_create_card(ui_HomePage, 14, 143, 212, 74);
+    label = ui_create_label(env_card, "AHT21 / ENVIRONMENT", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 10, 8);
+    ui_temperature_label = ui_create_label(env_card, "--.- C", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+    lv_obj_align(ui_temperature_label, LV_ALIGN_TOP_LEFT, 12, 33);
+    ui_humidity_label = ui_create_label(env_card, "--.- %", lv_color_hex(0xFFD27A), &lv_font_montserrat_18);
+    lv_obj_align(ui_humidity_label, LV_ALIGN_TOP_RIGHT, -12, 33);
 
     ui_status_label = ui_create_label(ui_HomePage, "READY / TOUCH", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
-    lv_obj_align(ui_status_label, LV_ALIGN_TOP_MID, 0, 216);
-    ui_detail_label = ui_create_label(ui_HomePage, "DEMO DATA / PLACEHOLDER", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-    lv_obj_align(ui_detail_label, LV_ALIGN_TOP_MID, 0, 234);
+    lv_obj_align(ui_status_label, LV_ALIGN_TOP_MID, 0, 228);
+    ui_detail_label = ui_create_label(ui_HomePage, "ENVIRONMENT / MANUAL TIME", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
+    lv_obj_align(ui_detail_label, LV_ALIGN_TOP_MID, 0, 248);
 
     ui_AppsPage = lv_obj_create(NULL);
     ui_style_screen(ui_AppsPage);
@@ -751,14 +1008,10 @@ void ui_HomePage_screen_init(void)
         lv_obj_set_pos(item, 6, 112);
         item = ui_create_app_row(list, "\xEE\xA2\x9B", &ui_font_iconfont28, lv_color_hex(0x8CECF5), "CALCULATOR", ui_calc_app_event);
         lv_obj_set_pos(item, 6, 168);
-        item = ui_create_app_row(list, "\xEE\x98\xB3", &ui_font_iconfont34, lv_color_hex(0x77E8EF), "STOPWATCH", ui_stopwatch_app_event);
+        item = ui_create_app_row(list, LV_SYMBOL_LOOP, &lv_font_montserrat_18, lv_color_hex(0x77E8EF), "TIMER", ui_stopwatch_app_event);
         lv_obj_set_pos(item, 6, 224);
-        item = ui_create_app_row(list, "\xEE\x99\x92", &ui_font_iconfont34, lv_color_hex(0xFFD27A), "COUNTDOWN", ui_countdown_app_event);
-        lv_obj_set_pos(item, 6, 280);
-        item = ui_create_app_row(list, "\xEE\x9D\xA2", &ui_font_iconfont34, lv_color_hex(0xD38EBF), "ALARM", ui_alarm_app_event);
-        lv_obj_set_pos(item, 6, 336);
         item = ui_create_app_row(list, "\xEE\x98\x80", &ui_font_iconfont30, lv_color_hex(0x8CECF5), "SETTINGS", ui_settings_event);
-        lv_obj_set_pos(item, 6, 392);
+        lv_obj_set_pos(item, 6, 280);
     }
 
     ui_CalcPage = lv_obj_create(NULL);
@@ -813,85 +1066,72 @@ void ui_HomePage_screen_init(void)
     ui_style_screen(ui_StopwatchPage);
     {
         lv_obj_t * back = ui_create_action_button(ui_StopwatchPage, "<", 34, 28, ui_calc_back_event);
-        lv_obj_t * start = ui_create_action_button(ui_StopwatchPage, "START / PAUSE", 118, 34, ui_stopwatch_toggle_event);
-        lv_obj_t * reset = ui_create_action_button(ui_StopwatchPage, "RESET", 70, 34, ui_stopwatch_reset_event);
+        lv_obj_t * stopwatch = ui_create_action_button(ui_StopwatchPage, "SW", 64, 28, ui_timer_mode_event);
+        lv_obj_t * countdown = ui_create_action_button(ui_StopwatchPage, "COUNT", 64, 28, ui_timer_mode_event);
+        lv_obj_t * alarm = ui_create_action_button(ui_StopwatchPage, "ALARM", 64, 28, ui_timer_mode_event);
+        lv_obj_t * control;
+        lv_obj_t * reset;
+        lv_obj_t * adjust_up;
+        lv_obj_t * adjust_down;
         lv_obj_set_pos(back, 14, 14);
-        title = ui_create_label(ui_StopwatchPage, "STOPWATCH", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_set_pos(stopwatch, 12, 52);
+        lv_obj_set_pos(countdown, 88, 52);
+        lv_obj_set_pos(alarm, 164, 52);
+        lv_obj_set_user_data(stopwatch, (void *)(uintptr_t)0U);
+        lv_obj_set_user_data(countdown, (void *)(uintptr_t)1U);
+        lv_obj_set_user_data(alarm, (void *)(uintptr_t)2U);
+        title = ui_create_label(ui_StopwatchPage, "TIMER", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
         lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
-        section = ui_create_label(ui_StopwatchPage, "LOCAL / NO RTC REQUIRED", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
-        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 52);
+        ui_timer_mode_label = ui_create_label(ui_StopwatchPage, "STOPWATCH", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        lv_obj_align(ui_timer_mode_label, LV_ALIGN_TOP_MID, 0, 88);
         ui_stopwatch_display = ui_create_label(ui_StopwatchPage, "00:00.0", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
-        lv_obj_align(ui_stopwatch_display, LV_ALIGN_TOP_MID, 0, 96);
-        lv_obj_set_pos(start, 26, 172);
-        lv_obj_set_pos(reset, 148, 172);
-        label = ui_create_label(ui_StopwatchPage, "TIMES ARE RESET ON REBOOT", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 226);
+        lv_obj_align(ui_stopwatch_display, LV_ALIGN_TOP_MID, 0, 104);
+        ui_timer_status_label = ui_create_label(ui_StopwatchPage, "PAUSED", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
+        lv_obj_align(ui_timer_status_label, LV_ALIGN_TOP_MID, 0, 148);
+        control = ui_create_action_button(ui_StopwatchPage, "START", 92, 34, ui_timer_control_event);
+        reset = ui_create_action_button(ui_StopwatchPage, "RESET", 72, 34, ui_timer_reset_event);
+        adjust_up = ui_create_action_button(ui_StopwatchPage, "+1 MIN", 72, 30, ui_timer_adjust_event);
+        adjust_down = ui_create_action_button(ui_StopwatchPage, "-10 SEC", 72, 30, ui_timer_adjust_event);
+        lv_obj_set_pos(control, 24, 178);
+        lv_obj_set_pos(reset, 144, 178);
+        lv_obj_set_pos(adjust_up, 30, 220);
+        lv_obj_set_pos(adjust_down, 138, 220);
+        lv_obj_set_user_data(adjust_up, (void *)(intptr_t)60);
+        lv_obj_set_user_data(adjust_down, (void *)(intptr_t)-10);
+        ui_timer_control_button = control;
+        ui_timer_adjust_up_button = adjust_up;
+        ui_timer_adjust_down_button = adjust_down;
         ui_stopwatch_timer = lv_timer_create(ui_stopwatch_timer_cb, 100, NULL);
         lv_timer_pause(ui_stopwatch_timer);
-    }
-
-    ui_CountdownPage = lv_obj_create(NULL);
-    ui_style_screen(ui_CountdownPage);
-    {
-        lv_obj_t * back = ui_create_action_button(ui_CountdownPage, "<", 34, 28, ui_calc_back_event);
-        lv_obj_t * start = ui_create_action_button(ui_CountdownPage, "START / PAUSE", 118, 34, ui_countdown_toggle_event);
-        lv_obj_t * reset = ui_create_action_button(ui_CountdownPage, "RESET", 70, 34, ui_countdown_reset_event);
-        lv_obj_t * add = ui_create_action_button(ui_CountdownPage, "+1 MIN", 70, 30, ui_countdown_add_event);
-        lv_obj_t * sub = ui_create_action_button(ui_CountdownPage, "-10 SEC", 70, 30, ui_countdown_sub_event);
-        lv_obj_set_pos(back, 14, 14);
-        title = ui_create_label(ui_CountdownPage, "COUNTDOWN", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
-        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
-        section = ui_create_label(ui_CountdownPage, "LOCAL TIMER / DEMO", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
-        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 52);
-        ui_countdown_display = ui_create_label(ui_CountdownPage, "01:00", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
-        lv_obj_align(ui_countdown_display, LV_ALIGN_TOP_MID, 0, 96);
-        lv_obj_set_pos(start, 26, 164);
-        lv_obj_set_pos(reset, 148, 164);
-        lv_obj_set_pos(add, 44, 210);
-        lv_obj_set_pos(sub, 126, 210);
-        label = ui_create_label(ui_CountdownPage, "NO SOUND / VIBRATION MODULE YET", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 252);
-        ui_countdown_timer = lv_timer_create(ui_countdown_timer_cb, 1000, NULL);
-        lv_timer_pause(ui_countdown_timer);
-    }
-
-    ui_AlarmPage = lv_obj_create(NULL);
-    ui_style_screen(ui_AlarmPage);
-    {
-        lv_obj_t * back = ui_create_action_button(ui_AlarmPage, "<", 34, 28, ui_calc_back_event);
-        lv_obj_set_pos(back, 14, 14);
-        title = ui_create_label(ui_AlarmPage, "ALARM", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
-        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
-        section = ui_create_label(ui_AlarmPage, "FRAMEWORK / SILENT", lv_color_hex(0xFFD27A), &lv_font_montserrat_14);
-        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 54);
-        label = ui_create_card(ui_AlarmPage, 20, 90, 200, 74);
-        {
-            lv_obj_t * value = ui_create_label(label, "07:30", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
-            lv_obj_align(value, LV_ALIGN_CENTER, 0, 0);
-        }
-        label = ui_create_label(ui_AlarmPage, "ALARM STORAGE / NOT ENABLED", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 190);
-        label = ui_create_label(ui_AlarmPage, "BUZZER OR VIBRATION REQUIRED", lv_color_hex(0x6D87A7), &lv_font_montserrat_14);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 218);
+        ui_timer_refresh();
     }
 
     ui_RtcPage = lv_obj_create(NULL);
     ui_style_screen(ui_RtcPage);
     {
-        lv_obj_t * back = ui_create_action_button(ui_RtcPage, "<", 34, 28, ui_calc_back_event);
-        lv_obj_t * set = ui_create_action_button(ui_RtcPage, "SETUP NEXT", 118, 34, ui_rtc_event);
+        lv_obj_t * back = ui_create_action_button(ui_RtcPage, "<", 34, 28, ui_time_back_event);
+        lv_obj_t * hour_up = ui_create_action_button(ui_RtcPage, "+ HOUR", 82, 32, ui_time_adjust_event);
+        lv_obj_t * hour_down = ui_create_action_button(ui_RtcPage, "- HOUR", 82, 32, ui_time_adjust_event);
+        lv_obj_t * min_up = ui_create_action_button(ui_RtcPage, "+ MIN", 82, 32, ui_time_adjust_event);
+        lv_obj_t * min_down = ui_create_action_button(ui_RtcPage, "- MIN", 82, 32, ui_time_adjust_event);
+        lv_obj_t * apply = ui_create_action_button(ui_RtcPage, "APPLY", 92, 34, ui_time_apply_event);
         lv_obj_set_pos(back, 14, 14);
-        title = ui_create_label(ui_RtcPage, "RTC TIME", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        title = ui_create_label(ui_RtcPage, "TIME SET", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
         lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
-        section = ui_create_label(ui_RtcPage, "HARDWARE MODULE / PENDING", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
-        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 52);
-        label = ui_create_label(ui_RtcPage, "2026-08-24", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 94);
-        label = ui_create_label(ui_RtcPage, "12:00:00", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 126);
-        lv_obj_set_pos(set, 61, 196);
-        label = ui_create_label(ui_RtcPage, "ENABLE RTC + LSE IN CUBEMX FIRST", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 244);
+        ui_time_clock_label = ui_create_label(ui_RtcPage, "09:41:00", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
+        lv_obj_align(ui_time_clock_label, LV_ALIGN_TOP_MID, 0, 74);
+        ui_time_status_label = ui_create_label(ui_RtcPage, "MANUAL CLOCK / RAM ONLY", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        lv_obj_align(ui_time_status_label, LV_ALIGN_TOP_MID, 0, 124);
+        lv_obj_set_pos(hour_up, 16, 158);
+        lv_obj_set_pos(hour_down, 16, 198);
+        lv_obj_set_pos(min_up, 142, 158);
+        lv_obj_set_pos(min_down, 142, 198);
+        lv_obj_set_user_data(hour_up, (void *)(intptr_t)3600);
+        lv_obj_set_user_data(hour_down, (void *)(intptr_t)-3600);
+        lv_obj_set_user_data(min_up, (void *)(intptr_t)60);
+        lv_obj_set_user_data(min_down, (void *)(intptr_t)-60);
+        lv_obj_set_pos(apply, 74, 238);
+        ui_time_timer = lv_timer_create(ui_time_timer_cb, 1000, NULL);
     }
 
     ui_AIPage = lv_obj_create(NULL);
@@ -951,7 +1191,20 @@ void ui_HomePage_screen_init(void)
         label = ui_create_label(ui_SettingsPage, "DISPLAY BRIGHTNESS", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
         lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 204);
         label = ui_create_label(ui_SettingsPage, "PWM / PA15 / TIM2 CH1", lv_color_hex(0x6D87A7), &lv_font_montserrat_14);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 230);
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 218);
+
+        section = ui_create_label(ui_SettingsPage, "SCREEN TIMEOUT", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 236);
+        {
+            lv_obj_t * timeout_down = ui_create_action_button(ui_SettingsPage, "-15S", 56, 26, ui_timeout_adjust_event);
+            lv_obj_t * timeout_up = ui_create_action_button(ui_SettingsPage, "+15S", 56, 26, ui_timeout_adjust_event);
+            lv_obj_set_pos(timeout_down, 24, 250);
+            lv_obj_set_pos(timeout_up, 160, 250);
+            lv_obj_set_user_data(timeout_down, (void *)(intptr_t)-15);
+            lv_obj_set_user_data(timeout_up, (void *)(intptr_t)15);
+            ui_timeout_value = ui_create_label(ui_SettingsPage, "30s", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+            lv_obj_align(ui_timeout_value, LV_ALIGN_TOP_MID, 0, 250);
+        }
     }
 
     ui_quick_panel = lv_obj_create(ui_HomePage);
@@ -992,11 +1245,6 @@ void ui_set_sensor_values(const char * temperature, const char * humidity)
     if(ui_humidity_label && humidity) lv_label_set_text(ui_humidity_label, humidity);
 }
 
-void ui_set_steps(uint32_t steps)
-{
-    if(ui_steps_label) lv_label_set_text_fmt(ui_steps_label, "%lu", (unsigned long)steps);
-}
-
 void ui_set_connection_state(const char * state)
 {
     if(ui_connection_label && state) lv_label_set_text(ui_connection_label, state);
@@ -1017,7 +1265,7 @@ void ui_HomePage_screen_destroy(void)
 {
     if(ui_SettingsPage) lv_obj_del(ui_SettingsPage);
     if(ui_stopwatch_timer) lv_timer_del(ui_stopwatch_timer);
-    if(ui_countdown_timer) lv_timer_del(ui_countdown_timer);
+    if(ui_time_timer) lv_timer_del(ui_time_timer);
     if(ui_CalcPage) lv_obj_del(ui_CalcPage);
     if(ui_NoticePage) lv_obj_del(ui_NoticePage);
     if(ui_AIPage) lv_obj_del(ui_AIPage);
@@ -1029,11 +1277,9 @@ void ui_HomePage_screen_destroy(void)
     ui_AIPage = NULL;
     ui_CalcPage = NULL;
     ui_StopwatchPage = NULL;
-    ui_CountdownPage = NULL;
-    ui_AlarmPage = NULL;
     ui_RtcPage = NULL;
     ui_stopwatch_timer = NULL;
-    ui_countdown_timer = NULL;
+    ui_time_timer = NULL;
     ui_NoticePage = NULL;
     ui_SettingsPage = NULL;
     ui_connection_label = NULL;
@@ -1041,8 +1287,8 @@ void ui_HomePage_screen_destroy(void)
     ui_detail_label = NULL;
     ui_temperature_label = NULL;
     ui_humidity_label = NULL;
-    ui_steps_label = NULL;
     ui_app_status_label = NULL;
+    ui_timeout_value = NULL;
     ui_brightness_slider = NULL;
     ui_brightness_value = NULL;
     ui_quick_panel = NULL;

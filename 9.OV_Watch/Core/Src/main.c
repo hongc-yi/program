@@ -32,6 +32,7 @@
 #include "lcd_init.h"
 #include "CST816.h"
 #include "key.h"
+#include "esp_link.h"
 #include "lvgl.h"
 /* USER CODE END Includes */
 
@@ -100,6 +101,8 @@ int main(void)
   MX_DMA_Init();
   MX_USART1_UART_Init();
   MX_SPI1_Init();
+  MX_USART6_UART_Init();
+  ESP_Link_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */

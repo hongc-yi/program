@@ -14,6 +14,7 @@
 //tasks
 #include "user_HardwareInitTask.h"
 #include "user_LVGLTask.h"
+#include "user_SensorTask.h"
 
 /* Private typedef -----------------------------------------------------------*/
 
@@ -44,6 +45,13 @@ const osThreadAttr_t LvHandlerTask_attributes = {
   .priority = (osPriority_t) osPriorityLow1,
 };
 
+osThreadId_t SensorTaskHandle;
+const osThreadAttr_t SensorTask_attributes = {
+  .name = "SensorTask",
+  .stack_size = 128 * 6,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
+
 
 /* Message queues ------------------------------------------------------------*/
 
@@ -69,6 +77,7 @@ void User_Tasks_Init(void)
 	/* add threads, ... */
   HardwareInitTaskHandle  = osThreadNew(HardwareInitTask, NULL, &HardwareInitTask_attributes);
   LvHandlerTaskHandle     = osThreadNew(LvHandlerTask, NULL, &LvHandlerTask_attributes);
+  SensorTaskHandle        = osThreadNew(SensorTask, NULL, &SensorTask_attributes);
 
   /* add events, ... */
 

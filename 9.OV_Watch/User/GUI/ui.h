@@ -30,12 +30,13 @@ void ui_destroy(void);
 
 // Runtime data interface. Call these from the LVGL task context.
 void ui_set_sensor_values(const char * temperature, const char * humidity);
-void ui_set_steps(uint32_t steps);
 void ui_set_connection_state(const char * state);
 void ui_set_brightness(uint8_t percent);
 void ui_handle_swipe(lv_dir_t direction);
 void ui_handle_touch(lv_coord_t x, lv_coord_t y);
 void ui_open_apps(void);
+void ui_handle_key_confirm(void);
+void ui_set_time_from_network(uint8_t hour, uint8_t minute, uint8_t second);
 
 #ifdef __cplusplus
 } /*extern "C"*/
