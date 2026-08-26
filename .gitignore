@@ -26,5 +26,10 @@ build_log*.txt
 # 开发日志（本地保留，不入库）
 9.OV_Watch/DEV_LOG_*.md
 
+# 硬件图纸与笔记（仓库只保留 1~9 号工程；全局 ignore 也有 target/，这里冗余一份保证仓库自包含）
+target/
+image/
+RTOS调试文件路径.txt
+
 # 编辑器配置
 .vscode/
