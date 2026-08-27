@@ -4,9 +4,9 @@
 
 #define AHT21_ADDR 0x38U
 #define AHT21_SDA_PORT GPIOC
-#define AHT21_SCL_PORT GPIOC
-#define AHT21_SDA_PIN GPIO_PIN_5
-#define AHT21_SCL_PIN GPIO_PIN_4
+#define AHT21_SCL_PORT GPIOA
+#define AHT21_SDA_PIN GPIO_PIN_9
+#define AHT21_SCL_PIN GPIO_PIN_8
 
 static int16_t aht21_temperature_x10 = 0;
 static uint16_t aht21_humidity_x10 = 0;
@@ -148,6 +148,7 @@ uint8_t AHT21_Init(void)
     GPIO_InitTypeDef init = {0};
     uint8_t status;
 
+    __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
     init.Pin = AHT21_SCL_PIN;
     init.Mode = GPIO_MODE_OUTPUT_OD;
