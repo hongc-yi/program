@@ -1,7 +1,7 @@
-# ESP32-C3 联调固件（阶段一）
+# ESP32-C3 WiFi/NTP 校时固件（阶段二）
 
-配套手表端 `BSP/ESP_LINK`（USART2，PA2/PA3，115200 8N1）。
-本工程只做两件事：**验证 STM32↔ESP32 串口链路** 和 **手动/周期对时**；WiFi/NTP、语音 AI 是后续阶段，不在这个工程里。
+配套手表端 `BSP/ESP_LINK`（USART2，PA3 RX，115200 8N1）。
+本工程负责 WiFi/NTP 自动校时、离线软时钟和 ESP32 → STM32 单向同步。
 
 ## 目录
 
@@ -14,13 +14,14 @@ esp32-c3/
 
 > Arduino 规定 .ino 必须放在同名文件夹里，所以烧录时选的是 `ovwatch_link/ovwatch_link.ino`。
 
-## 接线（3 根杜邦线 + 共地）
+## 接线（2 根杜邦线）
 
 | ESP32-C3 supermini | → | 扩展板 H1 |
 |--------------------|---|-----------|
-| GPIO20 (RX)        | ← | Pin12 (D4 / PA2 / USART2_TX) |
 | GPIO21 (TX)        | → | Pin13 (D5 / PA3 / USART2_RX) |
 | GND                | — | Pin2 (GND) |
+
+GPIO20 不接线。H1 Pin12 实测为 PA0/KEY，接线会造成按键误触发。
 
 供电：开发期各插各的 USB（STM32 用核心板 USB2 口，ESP32 用自身 Type-C）。
 
@@ -44,7 +45,7 @@ USB 串口监视器 **115200**，行结尾选「换行符」。正常应看到�
 [STM] TIME_OK
 ```
 
-同时手表表盘时间会跳到该值并走秒。
+同时手表表盘时间会跳到该值并走秒。WiFi 连接后会自动使用 NTP 校准，默认时区为 UTC+8。
 
 监视器指令：
 
@@ -53,6 +54,8 @@ USB 串口监视器 **115200**，行结尾选「换行符」。正常应看到�
 | `ping` | 发 PING，手表回 `[STM] PONG`——链路最先验证的一步 |
 | `set 15:42:30` | 设置软时钟并立即同步到手表 |
 | `time` | 查看 ESP32 当前软时钟 |
+| `wifi` | 查看 WiFi 连接、RSSI 与 IP |
+| `ntp` | 立即执行一次 NTP 校准 |
 
 协议约定见手表端 `BSP/ESP_LINK/esp_link.h` 头注释：有效对时回 `TIME_OK`，PING 回 `PONG`，其余回 `ERR`。
 

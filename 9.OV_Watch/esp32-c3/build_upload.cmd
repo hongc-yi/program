@@ -26,9 +26,9 @@ if errorlevel 1 (
 
 echo.
 echo [2/2] Uploading ...
-set "PORT="
-for /f "usebackq tokens=1" %%P in (`"%CLI%" --config-file "%CFG%" board list ^| findstr /i "esp32c3"`) do set "PORT=%%P"
-if not defined PORT set "PORT=COM6"
+rem The ESP32-C3 USB serial device is COM6 on this PC.
+rem Change this value if Windows assigns another COM number.
+set "PORT=COM6"
 echo Using port: %PORT%
 "%CLI%" --config-file "%CFG%" upload -p %PORT% --fqbn %FQBN% --input-dir "%BUILD%"
 if errorlevel 1 (

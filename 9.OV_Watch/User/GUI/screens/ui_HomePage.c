@@ -14,6 +14,21 @@ static lv_obj_t * ui_StopwatchPage = NULL;
 static lv_obj_t * ui_RtcPage = NULL;
 static lv_obj_t * ui_NoticePage = NULL;
 static lv_obj_t * ui_SettingsPage = NULL;
+static lv_obj_t * ui_ReactionPage = NULL;
+static lv_obj_t * ui_reaction_status = NULL;
+static lv_obj_t * ui_reaction_target = NULL;
+static lv_obj_t * ui_reaction_start_button = NULL;
+static lv_obj_t * ui_reaction_endless_button = NULL;
+static lv_obj_t * ui_reaction_exit_button = NULL;
+static bool ui_reaction_endless_menu = false;
+static uint8_t ui_reaction_level = 0U;
+static uint8_t ui_reaction_round = 0U;
+static uint8_t ui_reaction_score = 0U;
+static bool ui_reaction_active = false;
+static bool ui_reaction_endless = false;
+static uint32_t ui_reaction_tick = 0U;
+static uint16_t ui_reaction_total = 0U;
+static uint8_t ui_reaction_losses = 0U;
 
 static lv_obj_t * ui_connection_label = NULL;
 static lv_obj_t * ui_status_label = NULL;
@@ -83,6 +98,20 @@ static void ui_time_adjust_event(lv_event_t * event);
 static void ui_time_apply_event(lv_event_t * event);
 static void ui_time_back_event(lv_event_t * event);
 static void ui_timeout_adjust_event(lv_event_t * event);
+static void ui_reaction_app_event(lv_event_t * event);
+static void ui_reaction_target_event(lv_event_t * event);
+static void ui_reaction_start_event(lv_event_t * event);
+static void ui_reaction_back_event(lv_event_t * event);
+static void ui_reaction_create(void);
+static void ui_reaction_destroy(void);
+static void ui_reaction_start(void);
+static void ui_reaction_start_endless(void);
+static void ui_reaction_show_menu(void);
+static void ui_reaction_show_endless_menu(void);
+static uint16_t ui_reaction_endless_limit(void);
+
+static void ui_reaction_endless_event(lv_event_t * event);
+static void ui_reaction_exit_event(lv_event_t * event);
 static void ui_timer_control_action(void);
 static void ui_time_apply_action(void);
 static void ui_screen_timeout_refresh(void);
@@ -294,6 +323,10 @@ void ui_handle_key_confirm(void)
     }
 
     ui_screen_timeout_refresh();
+    if(lv_scr_act() == ui_ReactionPage) {
+        if(!ui_reaction_active) ui_reaction_show_endless_menu();
+        return;
+    }
     if(lv_scr_act() == ui_StopwatchPage) {
         ui_timer_control_action();
     } else if(lv_scr_act() == ui_RtcPage) {
@@ -344,6 +377,170 @@ static void ui_screen_timeout_check(void)
     }
 }
 
+static void ui_reaction_start(void)
+{
+    ui_reaction_endless_menu = false;
+    ui_reaction_level = 0U; ui_reaction_round = 0U; ui_reaction_score = 0U;
+    ui_reaction_total = 0U; ui_reaction_losses = 0U; ui_reaction_endless = false; ui_reaction_active = true;
+    lv_obj_add_flag(ui_reaction_start_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_reaction_endless_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_reaction_exit_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(ui_reaction_target, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_size(ui_reaction_target, 72, 54);
+    ui_reaction_tick = HAL_GetTick();
+    lv_label_set_text(ui_reaction_status, "LV1 0/5 LOSS 0 TIME 2.0S");
+} 
+
+static uint16_t ui_reaction_endless_limit(void)
+{
+    uint8_t step = ui_reaction_level > 3U ? ui_reaction_level - 3U : 0U;
+    uint16_t limit = step >= 5U ? 500U : (uint16_t)(1000U - step * 100U);
+    return limit < 500U ? 500U : limit;
+}
+
+static void ui_reaction_start_endless(void)
+{
+    ui_reaction_endless = true; ui_reaction_endless_menu = false; ui_reaction_level = 3U; ui_reaction_round = 0U;
+    ui_reaction_score = 0U; ui_reaction_losses = 0U; ui_reaction_total = 0U; ui_reaction_active = true;
+    lv_obj_add_flag(ui_reaction_start_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_reaction_endless_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_reaction_exit_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(ui_reaction_target, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_size(ui_reaction_target, 34, 25);
+    lv_label_set_text(ui_reaction_status, "ENDLESS 0/20 LOSS 0 TIME 1.0S");
+    ui_reaction_tick = HAL_GetTick();
+}
+
+static void ui_reaction_show_menu(void)
+{
+    ui_reaction_active = false; ui_reaction_endless_menu = false;
+    lv_obj_add_flag(ui_reaction_target, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(ui_reaction_start_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_reaction_endless_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_reaction_exit_button, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(ui_reaction_status, "READY  TIME 2.0S");
+}
+
+static void ui_reaction_show_endless_menu(void)
+{
+    ui_reaction_active = false; ui_reaction_endless_menu = true;
+    lv_obj_add_flag(ui_reaction_target, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_reaction_start_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(ui_reaction_endless_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(ui_reaction_exit_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_pos(ui_reaction_endless_button, 74, 120);
+    lv_obj_set_pos(ui_reaction_exit_button, 74, 166);
+    lv_label_set_text_fmt(ui_reaction_status, "ENDLESS MODE  TIME %u.%uS", ui_reaction_endless_limit() / 1000U, (ui_reaction_endless_limit() % 1000U) / 100U);
+}
+
+static void ui_reaction_destroy(void)
+{
+    ui_reaction_active = false;
+    if(ui_ReactionPage) { lv_obj_del(ui_ReactionPage); ui_ReactionPage = NULL; }
+    ui_reaction_status = NULL; ui_reaction_target = NULL;
+    ui_reaction_start_button = NULL; ui_reaction_endless_button = NULL; ui_reaction_exit_button = NULL;
+}
+
+static void ui_reaction_create(void)
+{
+    ui_ReactionPage = lv_obj_create(NULL);
+    ui_style_screen(ui_ReactionPage);
+    {
+        lv_obj_t * title = ui_create_label(ui_ReactionPage, "REACTION TAP", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_t * back = ui_create_action_button(ui_ReactionPage, "<", 34, 28, ui_reaction_back_event);
+        lv_obj_set_pos(back, 14, 14); lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+        ui_reaction_status = ui_create_label(ui_ReactionPage, "READY", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        lv_obj_align(ui_reaction_status, LV_ALIGN_TOP_MID, 0, 58);
+        ui_reaction_target = ui_create_action_button(ui_ReactionPage, "TAP", 72, 54, ui_reaction_target_event);
+        lv_obj_set_pos(ui_reaction_target, 84, 120);
+        ui_reaction_start_button = ui_create_action_button(ui_ReactionPage, "START", 92, 36, ui_reaction_start_event);
+        lv_obj_set_pos(ui_reaction_start_button, 74, 120);
+        ui_reaction_endless_button = ui_create_action_button(ui_ReactionPage, "ENDLESS", 92, 36, ui_reaction_endless_event);
+        lv_obj_set_pos(ui_reaction_endless_button, 20, 190);
+        ui_reaction_exit_button = ui_create_action_button(ui_ReactionPage, "EXIT", 92, 36, ui_reaction_exit_event);
+        lv_obj_set_pos(ui_reaction_exit_button, 128, 190);
+        lv_obj_add_flag(ui_reaction_target, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(ui_reaction_start_button, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(ui_reaction_endless_button, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(ui_reaction_exit_button, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void ui_reaction_endless_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_reaction_start_endless();
+}
+
+static void ui_reaction_exit_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_reaction_show_menu();
+}
+
+static void ui_reaction_start_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if(ui_reaction_endless_menu) ui_reaction_start_endless();
+    else ui_reaction_start();
+}
+
+static void ui_reaction_back_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_reaction_destroy(); lv_scr_load(ui_AppsPage);
+}
+
+static void ui_reaction_target_event(lv_event_t * event)
+{
+    static const uint8_t count[] = {5U, 10U, 20U};
+    static const uint16_t limit[] = {2000U, 1500U, 1000U};
+    uint32_t elapsed;
+    uint8_t size;
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if(!ui_reaction_active) return;
+    elapsed = HAL_GetTick() - ui_reaction_tick;
+    if(elapsed <= limit[ui_reaction_level < 3U ? ui_reaction_level : 2U]) {
+        ui_reaction_score++;
+    } else {
+        ui_reaction_losses++;
+    }
+    if(elapsed <= limit[ui_reaction_level < 3U ? ui_reaction_level : 2U]) {
+        ui_reaction_round++;
+        ui_reaction_total++;
+    }
+    if(ui_reaction_endless && ui_reaction_losses >= 4U) {
+        ui_reaction_show_endless_menu();
+        return;
+    }
+    if(!ui_reaction_endless && ui_reaction_losses >= 2U) {
+        ui_reaction_show_menu();
+        return;
+    }
+    if(!ui_reaction_endless && ui_reaction_round >= count[ui_reaction_level]) {
+        if(ui_reaction_score == count[ui_reaction_level] && ui_reaction_level < 2U) {
+            ui_reaction_level++; ui_reaction_round = 0U; ui_reaction_score = 0U; ui_reaction_losses = 0U;
+        } else if(ui_reaction_score < count[ui_reaction_level]) {
+            ui_reaction_show_menu(); return;
+        } else {
+            ui_reaction_show_endless_menu();
+            return;
+        }
+    }
+    if(ui_reaction_endless && ui_reaction_round >= 20U) {
+        ui_reaction_round = 0U; ui_reaction_level++;
+    }
+    size = ui_reaction_endless ? (ui_reaction_level > 9U ? 24U : (uint8_t)(40U - ui_reaction_level * 2U)) : (ui_reaction_level == 0U ? 72U : (ui_reaction_level == 1U ? 60U : 48U));
+    if(ui_reaction_endless) {
+        lv_label_set_text_fmt(ui_reaction_status, "ENDLESS %u/20 LOSS %u TIME %u.%uS", ui_reaction_round, ui_reaction_losses, ui_reaction_endless_limit() / 1000U, (ui_reaction_endless_limit() % 1000U) / 100U);
+    } else {
+        lv_label_set_text_fmt(ui_reaction_status, "LV%u %u/%u LOSS %u TIME %u.%uS", ui_reaction_level + 1U, ui_reaction_round, count[ui_reaction_level], ui_reaction_losses, limit[ui_reaction_level] / 1000U, (limit[ui_reaction_level] % 1000U) / 100U);
+    }
+    lv_obj_set_size(ui_reaction_target, size, size * 3U / 4U);
+    lv_obj_set_pos(ui_reaction_target, 18 + (HAL_GetTick() % 170U), 105 + ((HAL_GetTick() / 7U) % 115U));
+    ui_reaction_tick = HAL_GetTick();
+}
+
 static void ui_apps_back_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
@@ -353,7 +550,13 @@ static void ui_apps_back_event(lv_event_t * event)
 static void ui_ai_back_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    lv_scr_load(ui_HomePage);
+    lv_scr_load(ui_AppsPage);
+}
+
+static void ui_reaction_app_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_reaction_create(); ui_reaction_show_menu(); lv_scr_load(ui_ReactionPage);
 }
 
 static void ui_environment_event(lv_event_t * event)
@@ -660,7 +863,36 @@ static void ui_stopwatch_timer_cb(lv_timer_t * timer)
 
 static void ui_time_timer_cb(lv_timer_t * timer)
 {
+    static const uint8_t count[] = {5U, 10U, 20U};
+    static const uint16_t limit[] = {2000U, 1500U, 1000U};
+    uint16_t reaction_limit;
     uint32_t current;
+    reaction_limit = ui_reaction_endless ? ui_reaction_endless_limit() : limit[ui_reaction_level];
+    if(ui_reaction_active && ui_ReactionPage && lv_scr_act() == ui_ReactionPage &&
+       HAL_GetTick() - ui_reaction_tick > reaction_limit) {
+        ui_reaction_losses++;
+        if(ui_reaction_endless && ui_reaction_losses >= 4U) {
+            ui_reaction_show_endless_menu();
+        } else if(ui_reaction_endless) {
+            if(ui_reaction_round >= 20U) {
+                ui_reaction_round = 0U;
+                ui_reaction_level++;
+            }
+            lv_label_set_text_fmt(ui_reaction_status, "ENDLESS %u/20 LOSS %u TIME %u.%uS", ui_reaction_round, ui_reaction_losses, reaction_limit / 1000U, (reaction_limit % 1000U) / 100U);
+            lv_obj_set_size(ui_reaction_target, ui_reaction_level > 9U ? 24U : (uint8_t)(40U - ui_reaction_level * 2U), ui_reaction_level > 9U ? 18U : (uint8_t)((40U - ui_reaction_level * 2U) * 3U / 4U));
+            lv_obj_set_pos(ui_reaction_target, 18 + (HAL_GetTick() % 170U), 105 + ((HAL_GetTick() / 7U) % 115U));
+            ui_reaction_tick = HAL_GetTick();
+        } else {
+            if(ui_reaction_losses >= 2U) {
+                ui_reaction_show_menu();
+            } else {
+                lv_label_set_text_fmt(ui_reaction_status, "LV%u %u/%u LOSS %u TIME %u.%uS", ui_reaction_level + 1U, ui_reaction_round, count[ui_reaction_level], ui_reaction_losses, limit[ui_reaction_level] / 1000U, (limit[ui_reaction_level] % 1000U) / 100U);
+                lv_obj_set_pos(ui_reaction_target, 20 + (HAL_GetTick() % 160U), 105 + ((HAL_GetTick() / 7U) % 110U));
+                ui_reaction_tick = HAL_GetTick();
+            }
+        }
+    }
+
     LV_UNUSED(timer);
     ui_time_refresh();
     ui_screen_timeout_check();
@@ -1010,8 +1242,10 @@ void ui_HomePage_screen_init(void)
         lv_obj_set_pos(item, 6, 168);
         item = ui_create_app_row(list, LV_SYMBOL_LOOP, &lv_font_montserrat_18, lv_color_hex(0x77E8EF), "TIMER", ui_stopwatch_app_event);
         lv_obj_set_pos(item, 6, 224);
-        item = ui_create_app_row(list, "\xEE\x98\x80", &ui_font_iconfont30, lv_color_hex(0x8CECF5), "SETTINGS", ui_settings_event);
+        item = ui_create_app_row(list, "GAME", &lv_font_montserrat_14, lv_color_hex(0xFFD27A), "REACTION TAP", ui_reaction_app_event);
         lv_obj_set_pos(item, 6, 280);
+        item = ui_create_app_row(list, "SET", &lv_font_montserrat_14, lv_color_hex(0x8CECF5), "SETTINGS", ui_settings_event);
+        lv_obj_set_pos(item, 6, 336);
     }
 
     ui_CalcPage = lv_obj_create(NULL);
@@ -1267,6 +1501,7 @@ void ui_HomePage_screen_destroy(void)
     if(ui_stopwatch_timer) lv_timer_del(ui_stopwatch_timer);
     if(ui_time_timer) lv_timer_del(ui_time_timer);
     if(ui_CalcPage) lv_obj_del(ui_CalcPage);
+    if(ui_ReactionPage) lv_obj_del(ui_ReactionPage);
     if(ui_NoticePage) lv_obj_del(ui_NoticePage);
     if(ui_AIPage) lv_obj_del(ui_AIPage);
     if(ui_AppsPage) lv_obj_del(ui_AppsPage);
@@ -1276,6 +1511,7 @@ void ui_HomePage_screen_destroy(void)
     ui_AppsPage = NULL;
     ui_AIPage = NULL;
     ui_CalcPage = NULL;
+    ui_ReactionPage = NULL;
     ui_StopwatchPage = NULL;
     ui_RtcPage = NULL;
     ui_stopwatch_timer = NULL;

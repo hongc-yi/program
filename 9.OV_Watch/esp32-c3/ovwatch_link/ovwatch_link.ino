@@ -1,32 +1,31 @@
 /*
- * OV-Watch × ESP32-C3 串口链路联调固件（阶段一：链路验证 + 手动对时）
- * ------------------------------------------------------------------
- * 硬件接线（与 D:\learn\program\target\OV_Watch连接指南.md 一致）：
- *   ESP32 GPIO20 (RX) <- H1 Pin12 (D4/PA2/USART2_TX)
+ * OV-Watch + ESP32-C3 阶段二固件：WiFi/NTP 自动校时
+ * -------------------------------------------------
+ * 硬件接线（单向）：
  *   ESP32 GPIO21 (TX) -> H1 Pin13 (D5/PA3/USART2_RX)
- *   ESP32 GND         -> H1 Pin2 (GND，必须共地)
+ *   ESP32 GND         -> H1 Pin2 (GND)
+ *   GPIO20 悬空；H1 Pin12 是 PA0/KEY，禁止接线。
  *
- * 烧录：Arduino IDE -> 开发板选 ESP32C3 Dev Module -> Type-C 上传
- * 调试：USB 串口监视器 115200（行结尾选"换行符"）
- *
- * 行为：
- *   - 每 5 秒向手表发送 TIME,h,m,s（本地软时钟走秒），手表回 TIME_OK
- *   - 手表所有回执实时转发到 USB 监视器，前缀 [STM]
- *
- * 监视器指令：
- *   ping          发 PING 测链路（手表回 PONG）
- *   set 15:42:30  设置软时钟并立即同步到手表
- *
- * TODO(阶段二)：WiFi 连接 + NTP 校准软时钟后自动对时；
- *               阶段三：INMP441 录音 + 云端语音 + AI 回复文本下行。
+ * NTP 成功后校准本地软时钟，每 5 秒向手表发送 TIME,h,m,s。
+ * WiFi 断开时软时钟继续运行，后台自动重连并重新校准。
  */
 
 #include <HardwareSerial.h>
+#include <WiFi.h>
+#include <time.h>
 
-#define STM_RX_PIN     20
-#define STM_TX_PIN     21
-#define SYNC_PERIOD_MS 5000UL
-#define LED_PIN        8            /* supermini 板载 LED（启动闪一下 + 心跳） */
+#define STM_TX_PIN             21
+#define SYNC_PERIOD_MS         5000UL
+#define WIFI_RETRY_MS          30000UL
+#define NTP_RETRY_MS           5000UL
+#define NTP_RESYNC_MS          3600000UL
+#define LED_PIN                8
+
+static const char WIFI_SSID[] = "tytxdy";
+static const char WIFI_PASSWORD[] = "lty20120712";
+static const char NTP_SERVER_1[] = "ntp.aliyun.com";
+static const char NTP_SERVER_2[] = "pool.ntp.org";
+static const long UTC_OFFSET_SECONDS = 8L * 3600L;
 
 HardwareSerial StmSerial(1);
 
@@ -34,8 +33,10 @@ HardwareSerial StmSerial(1);
 static uint32_t clockSeconds = 14UL * 3600UL + 35UL * 60UL + 20UL; /* 开机默认 */
 static uint32_t clockAnchorMs = 0;
 
-static char stmLine[96];
-static uint8_t stmLen = 0;
+static uint32_t lastWifiAttemptMs = 0;
+static uint32_t lastNtpAttemptMs = 0;
+static uint32_t lastNtpSyncMs = 0;
+static bool wifiWasConnected = false;
 
 static uint32_t elapsedSeconds(void)
 {
@@ -68,6 +69,67 @@ static void sendTimeToWatch(void)
   stmSendLine(buf);
 }
 
+static bool syncClockFromNtp(void)
+{
+  struct tm timeInfo;
+  if(!getLocalTime(&timeInfo, 1000)) {
+    Serial.println("[NTP] 尚未获取到时间");
+    return false;
+  }
+
+  applyClock((uint32_t)timeInfo.tm_hour * 3600UL +
+             (uint32_t)timeInfo.tm_min * 60UL +
+             (uint32_t)timeInfo.tm_sec);
+  lastNtpSyncMs = millis();
+  Serial.printf("[NTP] 校准成功: %04d-%02d-%02d %02d:%02d:%02d\n",
+                timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
+                timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
+  sendTimeToWatch();
+  return true;
+}
+
+static void serviceNetwork(void)
+{
+  uint32_t now = millis();
+  bool connected = WiFi.status() == WL_CONNECTED;
+
+  if(!connected) {
+    if(wifiWasConnected) {
+      Serial.println("[WiFi] 连接断开，软时钟继续运行");
+      wifiWasConnected = false;
+      lastWifiAttemptMs = now;
+    }
+
+    wl_status_t status = WiFi.status();
+    if(status == WL_IDLE_STATUS || status == WL_DISCONNECTED ||
+       status == WL_NO_SSID_AVAIL || status == WL_CONNECT_FAILED ||
+       status == WL_CONNECTION_LOST ||
+       (lastWifiAttemptMs != 0 && now - lastWifiAttemptMs >= WIFI_RETRY_MS)) {
+      if(lastWifiAttemptMs == 0 || now - lastWifiAttemptMs >= WIFI_RETRY_MS) {
+        lastWifiAttemptMs = now;
+        Serial.printf("[WiFi] 正在连接 %s...\n", WIFI_SSID);
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+      }
+    }
+    return;
+  }
+
+  if(!wifiWasConnected) {
+    wifiWasConnected = true;
+    lastNtpAttemptMs = 0;
+    Serial.print("[WiFi] 已连接，IP: ");
+    Serial.println(WiFi.localIP());
+    configTime(UTC_OFFSET_SECONDS, 0, NTP_SERVER_1, NTP_SERVER_2);
+  }
+
+  if(lastNtpSyncMs == 0 || now - lastNtpSyncMs >= NTP_RESYNC_MS) {
+    if(lastNtpAttemptMs == 0 || now - lastNtpAttemptMs >= NTP_RETRY_MS) {
+      lastNtpAttemptMs = now;
+      syncClockFromNtp();
+    }
+  }
+}
+
 /* 解析并执行监视器指令 */
 static void handleConsole(const String &cmd)
 {
@@ -91,7 +153,7 @@ static void handleConsole(const String &cmd)
     return;
   }
 
-  if(cmd.startsWith("time")) {
+  if(cmd.equalsIgnoreCase("time")) {
     uint32_t t = (clockSeconds + elapsedSeconds()) % 86400UL;
     char buf[12];
     snprintf(buf, sizeof(buf), "%02lu:%02lu:%02lu",
@@ -102,26 +164,52 @@ static void handleConsole(const String &cmd)
     return;
   }
 
-  Serial.println("[HLP] 指令: ping | set HH:MM:SS | time");
+  if(cmd.equalsIgnoreCase("wifi")) {
+    if(WiFi.status() == WL_CONNECTED) {
+      Serial.printf("[WiFi] 已连接 %s, RSSI: %d dBm, IP: ", WIFI_SSID, WiFi.RSSI());
+      Serial.println(WiFi.localIP());
+    } else {
+      Serial.printf("[WiFi] 未连接，状态码: %d\n", WiFi.status());
+    }
+    return;
+  }
+
+  if(cmd.equalsIgnoreCase("ntp")) {
+    if(WiFi.status() != WL_CONNECTED) {
+      Serial.println("[NTP] WiFi 未连接");
+    } else {
+      syncClockFromNtp();
+    }
+    return;
+  }
+
+  Serial.println("[HLP] 指令: ping | set HH:MM:SS | time | wifi | ntp");
 }
 
 void setup()
 {
-  Serial.begin(115200);                       /* USB 调试口 */
-  StmSerial.begin(115200, SERIAL_8N1, STM_RX_PIN, STM_TX_PIN);
+  Serial.begin(115200);
+  StmSerial.begin(115200, SERIAL_8N1, -1, STM_TX_PIN);
   clockAnchorMs = millis();
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);      /* 启动点亮，验证固件在运行 */
+  digitalWrite(LED_PIN, HIGH);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
 
   Serial.println();
-  Serial.println("=== OV-Watch ESP32-C3 链路联调 ===");
-  Serial.println("指令: ping | set HH:MM:SS | time");
+  Serial.println("=== OV-Watch ESP32-C3 WiFi/NTP 自动校时 ===");
+  Serial.println("指令: ping | set HH:MM:SS | time | wifi | ntp");
 
-  sendTimeToWatch();                          /* 开机先同步一次 */
+  sendTimeToWatch();
+  serviceNetwork();
 }
 
 void loop()
 {
+  serviceNetwork();
+
   /* 周期对时 */
   static uint32_t lastSync = 0;
   if(millis() - lastSync >= SYNC_PERIOD_MS) {
@@ -137,23 +225,6 @@ void loop()
     ledOn = !ledOn;
     lastLed = now;
     digitalWrite(LED_PIN, ledOn ? HIGH : LOW);
-  }
-
-  /* 手表回执 -> USB 监视器 */
-  while(StmSerial.available() > 0) {
-    char c = (char)StmSerial.read();
-    if(c == '\n' || c == '\r') {
-      if(stmLen > 0) {
-        stmLine[stmLen] = '\0';
-        Serial.print("[STM] ");
-        Serial.println(stmLine);
-        stmLen = 0;
-      }
-    } else if(stmLen < sizeof(stmLine) - 1) {
-      stmLine[stmLen++] = c;
-    } else {
-      stmLen = 0;                             /* 超长丢弃 */
-    }
   }
 
   /* USB 监视器指令 */
