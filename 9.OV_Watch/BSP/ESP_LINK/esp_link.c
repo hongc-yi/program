@@ -3,12 +3,13 @@
 #include "ui.h"
 #include <string.h>
 
-#define ESP_LINK_LINE_SIZE    96U
+#define ESP_LINK_LINE_SIZE    256U
 #define ESP_LINK_GAP_MS       300U   /* 字节间超时：超过即丢弃残行 */
 
 static uint8_t esp_rx_byte;
+static char esp_ai_text[ESP_LINK_LINE_SIZE];
 static volatile char esp_line[ESP_LINK_LINE_SIZE];
-static volatile uint8_t esp_line_length = 0U;
+static volatile uint16_t esp_line_length = 0U;
 static volatile uint8_t esp_line_ready = 0U;
 static volatile uint32_t esp_rx_last_tick = 0U;
 
@@ -71,7 +72,7 @@ static int esp_link_parse_number(const char **cursor, unsigned int *value)
 
     while((*p >= '0') && (*p <= '9')) {
         acc = (acc * 10U) + (unsigned int)(*p - '0');
-        if(acc > 255U) return 0;
+        if(acc > 9999U) return 0;
         p++;
     }
     *value = acc;
@@ -79,13 +80,33 @@ static int esp_link_parse_number(const char **cursor, unsigned int *value)
     return 1;
 }
 
+static void esp_link_process_ai(const char *line)
+{
+    const char *text = line + 8;
+    strncpy(esp_ai_text, text, ESP_LINK_LINE_SIZE - 1U);
+    esp_ai_text[ESP_LINK_LINE_SIZE - 1U] = '\0';
+    ui_set_ai_text(esp_ai_text);
+}
+
 static void esp_link_process_time(const char *line)
 {
     const char *p = line + 5;           /* 跳过 "TIME," */
+    unsigned int year = 0U;
+    unsigned int month = 0U;
+    unsigned int day = 0U;
     unsigned int hour = 0U;
     unsigned int minute = 0U;
     unsigned int second = 0U;
 
+    if(!esp_link_parse_number(&p, &year))      { ESP_Link_SendLine("ERR"); return; }
+    if(*p != ',')                              { ESP_Link_SendLine("ERR"); return; }
+    p++;
+    if(!esp_link_parse_number(&p, &month))    { ESP_Link_SendLine("ERR"); return; }
+    if(*p != ',')                              { ESP_Link_SendLine("ERR"); return; }
+    p++;
+    if(!esp_link_parse_number(&p, &day))      { ESP_Link_SendLine("ERR"); return; }
+    if(*p != ',')                              { ESP_Link_SendLine("ERR"); return; }
+    p++;
     if(!esp_link_parse_number(&p, &hour))      { ESP_Link_SendLine("ERR"); return; }
     if(*p != ',')                              { ESP_Link_SendLine("ERR"); return; }
     p++;
@@ -97,12 +118,14 @@ static void esp_link_process_time(const char *line)
     while(*p == ' ') p++;
     if(*p != '\0')                             { ESP_Link_SendLine("ERR"); return; }
 
-    if((hour >= 24U) || (minute >= 60U) || (second >= 60U)) {
+    if((year < 2024U) || (year > 2099U) || (month < 1U) || (month > 12U) ||
+       (day < 1U) || (day > 31U) || (hour >= 24U) || (minute >= 60U) || (second >= 60U)) {
         ESP_Link_SendLine("ERR");
         return;
     }
 
-    ui_set_time_from_network((uint8_t)hour, (uint8_t)minute, (uint8_t)second);
+    ui_set_time_from_network((uint16_t)year, (uint8_t)month, (uint8_t)day,
+                             (uint8_t)hour, (uint8_t)minute, (uint8_t)second);
     ESP_Link_SendLine("TIME_OK");
 }
 
@@ -126,7 +149,9 @@ void ESP_Link_Process(void)
     esp_line_ready = 0U;
     __enable_irq();
 
-    if(strncmp(line, "TIME,", 5U) == 0) {
+    if(strncmp(line, "AI_TEXT,", 8U) == 0) {
+        esp_link_process_ai(line);
+    } else if(strncmp(line, "TIME,", 5U) == 0) {
         esp_link_process_time(line);
     } else if(strncmp(line, "PING", 5U) == 0) {   /* 严格等于 PING(4字节+\0) */
         ESP_Link_SendLine("PONG");

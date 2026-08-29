@@ -32,10 +32,11 @@ static uint8_t ui_reaction_losses = 0U;
 
 static lv_obj_t * ui_connection_label = NULL;
 static lv_obj_t * ui_status_label = NULL;
-static lv_obj_t * ui_detail_label = NULL;
 static lv_obj_t * ui_temperature_label = NULL;
 static lv_obj_t * ui_humidity_label = NULL;
 static lv_obj_t * ui_app_status_label = NULL;
+static lv_obj_t * ui_ai_listening_label = NULL;
+static lv_obj_t * ui_ai_text_label = NULL;
 static lv_obj_t * ui_timeout_value = NULL;
 static lv_obj_t * ui_brightness_slider = NULL;
 static lv_obj_t * ui_brightness_value = NULL;
@@ -51,8 +52,11 @@ static lv_obj_t * ui_home_clock_label = NULL;
 static lv_obj_t * ui_home_date_label = NULL;
 static lv_obj_t * ui_time_clock_label = NULL;
 static lv_obj_t * ui_time_status_label = NULL;
-static lv_timer_t * ui_stopwatch_timer = NULL;
 static lv_timer_t * ui_time_timer = NULL;
+static lv_obj_t * ui_calendar = NULL;
+static uint16_t ui_calendar_year = 2026U;
+static uint8_t ui_calendar_month = 1U;
+static lv_timer_t * ui_stopwatch_timer = NULL;
 static lv_obj_t * ui_timer_control_button = NULL;
 static lv_obj_t * ui_timer_adjust_up_button = NULL;
 static lv_obj_t * ui_timer_adjust_down_button = NULL;
@@ -68,6 +72,10 @@ static uint32_t ui_alarm_seconds = 7U * 3600U + 30U * 60U;
 static uint32_t ui_alarm_last_clock_seconds = 0;
 static bool ui_alarm_last_clock_valid = false;
 static uint32_t ui_clock_seconds = 9U * 3600U + 41U * 60U;
+static uint16_t ui_date_year = 2026U;
+static uint8_t ui_date_month = 1U;
+static uint8_t ui_date_day = 1U;
+static uint8_t ui_date_weekday = 4U; /* Thursday */
 static uint32_t ui_clock_base_tick = 0;
 static uint32_t ui_time_edit_seconds = 9U * 3600U + 41U * 60U;
 static uint8_t ui_timer_mode = 0;
@@ -89,14 +97,12 @@ static void ui_calc_button_event(lv_event_t * event);
 static void ui_calc_back_event(lv_event_t * event);
 static void ui_calc_reset(void);
 static void ui_stopwatch_timer_cb(lv_timer_t * timer);
-static void ui_time_timer_cb(lv_timer_t * timer);
 static void ui_timer_mode_event(lv_event_t * event);
 static void ui_timer_control_event(lv_event_t * event);
 static void ui_timer_reset_event(lv_event_t * event);
 static void ui_timer_adjust_event(lv_event_t * event);
-static void ui_time_adjust_event(lv_event_t * event);
-static void ui_time_apply_event(lv_event_t * event);
 static void ui_time_back_event(lv_event_t * event);
+static void ui_calendar_nav_event(lv_event_t * event);
 static void ui_timeout_adjust_event(lv_event_t * event);
 static void ui_reaction_app_event(lv_event_t * event);
 static void ui_reaction_target_event(lv_event_t * event);
@@ -330,23 +336,50 @@ void ui_handle_key_confirm(void)
     if(lv_scr_act() == ui_StopwatchPage) {
         ui_timer_control_action();
     } else if(lv_scr_act() == ui_RtcPage) {
-        ui_time_apply_action();
+        return;
     } else if(lv_scr_act() == ui_AppsPage) {
         lv_scr_load(ui_HomePage);
     } else if(lv_scr_act() == ui_HomePage) {
         ui_open_apps();
+    } else if(lv_scr_act() == ui_AIPage) {
+        if(ui_ai_listening_label) lv_label_set_text(ui_ai_listening_label, "CLEANING...");
+        if(ui_ai_text_label) lv_label_set_text(ui_ai_text_label, "WAITING FOR QUESTION");
+        if(ui_ai_listening_label) lv_label_set_text(ui_ai_listening_label, "I'M HERE");
     }
 }
 
-void ui_set_time_from_network(uint8_t hour, uint8_t minute, uint8_t second)
+void ui_set_time_from_network(uint16_t year, uint8_t month, uint8_t day,
+                              uint8_t hour, uint8_t minute, uint8_t second)
 {
-    if(hour >= 24U || minute >= 60U || second >= 60U) return;
+    if(year < 2024U || month < 1U || month > 12U || day < 1U || day > 31U ||
+       hour >= 24U || minute >= 60U || second >= 60U) return;
+    ui_date_year = year;
+    ui_date_month = month;
+    ui_date_day = day;
+    ui_date_weekday = 0U;
+    /* 2026-01-01 is Thursday; Gregorian weekday calculation. */
+    {
+        uint16_t y = year;
+        uint8_t m = month;
+        if(m < 3U) { m = (uint8_t)(m + 12U); y--; }
+        ui_date_weekday = (uint8_t)((y + y / 4U - y / 100U + y / 400U + (13U * (m + 1U)) / 5U + day) % 7U);
+        ui_date_weekday = (uint8_t)((ui_date_weekday + 6U) % 7U);
+    }
     ui_clock_seconds = (uint32_t)hour * 3600U + (uint32_t)minute * 60U + second;
     ui_clock_base_tick = HAL_GetTick();
     ui_time_edit_seconds = ui_clock_seconds;
     ui_time_editing = false;
     ui_alarm_last_clock_valid = false;
     ui_alarm_ringing = false;
+    ui_calendar_year = ui_date_year;
+    ui_calendar_month = ui_date_month;
+    if(ui_calendar) {
+        lv_calendar_set_showed_date(ui_calendar, ui_calendar_year, ui_calendar_month);
+        lv_calendar_set_today_date(ui_calendar, ui_date_year, ui_date_month, ui_date_day);
+    }
+    if(ui_time_status_label) {
+        lv_label_set_text_fmt(ui_time_status_label, "%04u/%u", (unsigned int)ui_date_year, (unsigned int)ui_date_month);
+    }
     ui_time_refresh();
 }
 
@@ -773,6 +806,12 @@ static void ui_time_refresh(void)
     if(ui_home_clock_label) {
         lv_label_set_text_fmt(ui_home_clock_label, "%02lu:%02lu", (unsigned long)hours, (unsigned long)minutes);
     }
+    if(ui_home_date_label) {
+        static const char *weekday[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+        lv_label_set_text_fmt(ui_home_date_label, "%s %04u/%02u/%02u",
+                              weekday[ui_date_weekday], (unsigned int)ui_date_year,
+                              (unsigned int)ui_date_month, (unsigned int)ui_date_day);
+    }
     if(ui_time_clock_label) {
         lv_label_set_text_fmt(ui_time_clock_label, "%02lu:%02lu:%02lu",
                               (unsigned long)hours, (unsigned long)minutes,
@@ -997,6 +1036,7 @@ static void ui_timer_adjust_event(lv_event_t * event)
 
 static void ui_time_adjust_event(lv_event_t * event)
 {
+    LV_UNUSED(event);
     int32_t delta;
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
     delta = (int32_t)(intptr_t)lv_obj_get_user_data(lv_event_get_target(event));
@@ -1036,6 +1076,21 @@ static void ui_alarm_check(uint32_t current)
         ui_alarm_ringing = true;
     }
     ui_alarm_last_clock_seconds = current;
+}
+
+static void ui_calendar_nav_event(lv_event_t * event)
+{
+    int8_t delta = (int8_t)(intptr_t)lv_obj_get_user_data(lv_event_get_target(event));
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    if(delta > 0) {
+        if(ui_calendar_month == 12U) { ui_calendar_month = 1U; ui_calendar_year++; }
+        else ui_calendar_month++;
+    } else {
+        if(ui_calendar_month == 1U) { ui_calendar_month = 12U; ui_calendar_year--; }
+        else ui_calendar_month--;
+    }
+    if(ui_calendar) lv_calendar_set_showed_date(ui_calendar, ui_calendar_year, ui_calendar_month);
+    if(ui_time_status_label) lv_label_set_text_fmt(ui_time_status_label, "%04u/%u", (unsigned int)ui_calendar_year, (unsigned int)ui_calendar_month);
 }
 
 static void ui_time_apply_action(void)
@@ -1168,6 +1223,9 @@ void ui_HomePage_screen_init(void)
     lv_obj_t * section;
     lv_obj_t * env_card;
     lv_obj_t * label;
+    LV_UNUSED(ui_time_timer_cb);
+    LV_UNUSED(ui_time_adjust_event);
+    LV_UNUSED(ui_time_apply_event);
 
     ui_HomePage = lv_obj_create(NULL);
     ui_style_screen(ui_HomePage);
@@ -1185,16 +1243,17 @@ void ui_HomePage_screen_init(void)
     lv_obj_set_style_bg_opa(divider, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(divider, 0, LV_PART_MAIN);
 
-    section = ui_create_label(ui_HomePage, "WATCH STATUS / DEMO", lv_color_hex(0x8CECF5), &lv_font_montserrat_14);
-    lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 50);
     ui_home_clock_label = ui_create_label(ui_HomePage, "09:41", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
-    lv_obj_align(ui_home_clock_label, LV_ALIGN_TOP_MID, 0, 68);
-    ui_home_date_label = ui_create_label(ui_HomePage, "MANUAL TIME / 24 C", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-    lv_obj_align(ui_home_date_label, LV_ALIGN_TOP_MID, 0, 111);
+    lv_obj_align(ui_home_clock_label, LV_ALIGN_TOP_MID, 0, 50);
+    ui_home_date_label = ui_create_label(ui_HomePage, "THU 2026/01/01", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
+    lv_obj_set_width(ui_home_date_label, 150);
+    lv_label_set_long_mode(ui_home_date_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(ui_home_date_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_align(ui_home_date_label, LV_ALIGN_TOP_MID, 0, 93);
     ui_clock_base_tick = HAL_GetTick();
     ui_screen_timeout_refresh();
 
-    env_card = ui_create_card(ui_HomePage, 14, 143, 212, 74);
+    env_card = ui_create_card(ui_HomePage, 14, 125, 212, 74);
     label = ui_create_label(env_card, "AHT21 / ENVIRONMENT", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
     lv_obj_align(label, LV_ALIGN_TOP_LEFT, 10, 8);
     ui_temperature_label = ui_create_label(env_card, "--.- C", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
@@ -1202,10 +1261,6 @@ void ui_HomePage_screen_init(void)
     ui_humidity_label = ui_create_label(env_card, "--.- %", lv_color_hex(0xFFD27A), &lv_font_montserrat_18);
     lv_obj_align(ui_humidity_label, LV_ALIGN_TOP_RIGHT, -12, 33);
 
-    ui_status_label = ui_create_label(ui_HomePage, "READY / TOUCH", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
-    lv_obj_align(ui_status_label, LV_ALIGN_TOP_MID, 0, 228);
-    ui_detail_label = ui_create_label(ui_HomePage, "ENVIRONMENT / MANUAL TIME", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-    lv_obj_align(ui_detail_label, LV_ALIGN_TOP_MID, 0, 248);
 
     ui_AppsPage = lv_obj_create(NULL);
     ui_style_screen(ui_AppsPage);
@@ -1236,7 +1291,7 @@ void ui_HomePage_screen_init(void)
         lv_obj_set_pos(item, 6, 0);
         item = ui_create_app_row(list, "\xEE\x9E\x88", &ui_font_iconfont28, lv_color_hex(0xD38EBF), "AI ASSISTANT", ui_ai_app_event);
         lv_obj_set_pos(item, 6, 56);
-        item = ui_create_app_row(list, "\xEE\x98\x81", &ui_font_iconfont30, lv_color_hex(0xFFD27A), "RTC TIME", ui_rtc_app_event);
+        item = ui_create_app_row(list, "\xEE\x98\x81", &ui_font_iconfont30, lv_color_hex(0xFFD27A), "CALENDAR", ui_rtc_app_event);
         lv_obj_set_pos(item, 6, 112);
         item = ui_create_app_row(list, "\xEE\xA2\x9B", &ui_font_iconfont28, lv_color_hex(0x8CECF5), "CALCULATOR", ui_calc_app_event);
         lv_obj_set_pos(item, 6, 168);
@@ -1344,28 +1399,24 @@ void ui_HomePage_screen_init(void)
     ui_style_screen(ui_RtcPage);
     {
         lv_obj_t * back = ui_create_action_button(ui_RtcPage, "<", 34, 28, ui_time_back_event);
-        lv_obj_t * hour_up = ui_create_action_button(ui_RtcPage, "+ HOUR", 82, 32, ui_time_adjust_event);
-        lv_obj_t * hour_down = ui_create_action_button(ui_RtcPage, "- HOUR", 82, 32, ui_time_adjust_event);
-        lv_obj_t * min_up = ui_create_action_button(ui_RtcPage, "+ MIN", 82, 32, ui_time_adjust_event);
-        lv_obj_t * min_down = ui_create_action_button(ui_RtcPage, "- MIN", 82, 32, ui_time_adjust_event);
-        lv_obj_t * apply = ui_create_action_button(ui_RtcPage, "APPLY", 92, 34, ui_time_apply_event);
         lv_obj_set_pos(back, 14, 14);
-        title = ui_create_label(ui_RtcPage, "TIME SET", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        title = ui_create_label(ui_RtcPage, "2026/1", lv_color_hex(0xFFF6EF), &lv_font_montserrat_24);
         lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
-        ui_time_clock_label = ui_create_label(ui_RtcPage, "09:41:00", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
-        lv_obj_align(ui_time_clock_label, LV_ALIGN_TOP_MID, 0, 74);
-        ui_time_status_label = ui_create_label(ui_RtcPage, "MANUAL CLOCK / RAM ONLY", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
-        lv_obj_align(ui_time_status_label, LV_ALIGN_TOP_MID, 0, 124);
-        lv_obj_set_pos(hour_up, 16, 158);
-        lv_obj_set_pos(hour_down, 16, 198);
-        lv_obj_set_pos(min_up, 142, 158);
-        lv_obj_set_pos(min_down, 142, 198);
-        lv_obj_set_user_data(hour_up, (void *)(intptr_t)3600);
-        lv_obj_set_user_data(hour_down, (void *)(intptr_t)-3600);
-        lv_obj_set_user_data(min_up, (void *)(intptr_t)60);
-        lv_obj_set_user_data(min_down, (void *)(intptr_t)-60);
-        lv_obj_set_pos(apply, 74, 238);
-        ui_time_timer = lv_timer_create(ui_time_timer_cb, 1000, NULL);
+        ui_time_status_label = title;
+        lv_obj_t * prev = ui_create_action_button(ui_RtcPage, "<", 70, 30, ui_calendar_nav_event);
+        lv_obj_t * next = ui_create_action_button(ui_RtcPage, ">", 70, 30, ui_calendar_nav_event);
+        lv_obj_set_user_data(prev, (void *)(intptr_t)-1);
+        lv_obj_set_user_data(next, (void *)(intptr_t)1);
+        lv_obj_set_pos(prev, 18, 52);
+        lv_obj_set_pos(next, 152, 52);
+        ui_calendar_year = ui_date_year;
+        ui_calendar_month = ui_date_month;
+        ui_calendar = lv_calendar_create(ui_RtcPage);
+        lv_obj_set_pos(ui_calendar, 10, 88);
+        lv_obj_set_size(ui_calendar, 220, 160);
+        lv_calendar_set_showed_date(ui_calendar, ui_calendar_year, ui_calendar_month);
+        lv_calendar_set_today_date(ui_calendar, ui_date_year, ui_date_month, ui_date_day);
+        lv_obj_set_style_text_font(ui_calendar, &lv_font_montserrat_14, LV_PART_MAIN);
     }
 
     ui_AIPage = lv_obj_create(NULL);
@@ -1376,18 +1427,17 @@ void ui_HomePage_screen_init(void)
         lv_obj_set_pos(back, 14, 14);
         title = ui_create_label(ui_AIPage, "AI LINK", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
         lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
-        section = ui_create_label(ui_AIPage, "LISTENING / ESP32", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
-        lv_obj_align(section, LV_ALIGN_TOP_MID, 0, 52);
-        label = ui_create_label(ui_AIPage, "I'M HERE", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 78);
-        label = ui_create_card(ui_AIPage, 24, 116, 192, 54);
+        ui_ai_listening_label = ui_create_label(ui_AIPage, "I'M HERE", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_align(ui_ai_listening_label, LV_ALIGN_TOP_MID, 0, 78);
+        label = ui_create_card(ui_AIPage, 8, 108, 224, 142);
         lv_obj_set_style_bg_opa(label, LV_OPA_80, LV_PART_MAIN);
         {
-            lv_obj_t * copy = ui_create_label(label, "VOICE CHANNEL READY", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
-            lv_obj_align(copy, LV_ALIGN_CENTER, 0, 0);
+            ui_ai_text_label = ui_create_label(label, "WAITING FOR QUESTION", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
+            lv_obj_set_width(ui_ai_text_label, 212);
+            lv_label_set_long_mode(ui_ai_text_label, LV_LABEL_LONG_WRAP);
+            lv_obj_align(ui_ai_text_label, LV_ALIGN_TOP_MID, 0, 12);
         }
-        label = ui_create_label(ui_AIPage, "DEMO / ESP32 NOT CONNECTED", lv_color_hex(0xE1D4E8), &lv_font_montserrat_14);
-        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 204);
+
     }
 
     ui_NoticePage = lv_obj_create(NULL);
@@ -1473,6 +1523,11 @@ void ui_HomePage_screen_init(void)
     }
 }
 
+void ui_set_ai_text(const char * text)
+{
+    if(ui_ai_text_label && text) lv_label_set_text(ui_ai_text_label, text);
+}
+
 void ui_set_sensor_values(const char * temperature, const char * humidity)
 {
     if(ui_temperature_label && temperature) lv_label_set_text(ui_temperature_label, temperature);
@@ -1520,10 +1575,11 @@ void ui_HomePage_screen_destroy(void)
     ui_SettingsPage = NULL;
     ui_connection_label = NULL;
     ui_status_label = NULL;
-    ui_detail_label = NULL;
     ui_temperature_label = NULL;
     ui_humidity_label = NULL;
     ui_app_status_label = NULL;
+    ui_ai_listening_label = NULL;
+    ui_ai_text_label = NULL;
     ui_timeout_value = NULL;
     ui_brightness_slider = NULL;
     ui_brightness_value = NULL;
