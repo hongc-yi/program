@@ -18,7 +18,7 @@
 #define STM_TX_PIN             21
 #define SYNC_PERIOD_MS         5000UL
 #define WIFI_RETRY_MS          30000UL
-#define WIFI_CONNECT_TIMEOUT_MS 15000UL
+#define WIFI_CONNECT_TIMEOUT_MS 20000UL
 #define NTP_RETRY_MS           5000UL
 #define NTP_RESYNC_MS          3600000UL
 #define LED_PIN                8
@@ -195,8 +195,12 @@ static void serviceNetwork(void)
     }
 
     if(wifiConnectStartedMs != 0 && now - wifiConnectStartedMs >= WIFI_CONNECT_TIMEOUT_MS) {
-      Serial.println("[WiFi] 连接超时，重置后重试");
-      WiFi.disconnect(true, true);
+      Serial.println("[WiFi] 连接超时，切换网络");
+      /* Note: do NOT wipe config here. disconnect(true, true) clears the WiFi
+       * driver storage on every failed attempt, which leaves the driver in a
+       * dirty state and makes the next connect() unreliable. A plain
+       * disconnect() lets the driver settle and keeps retries stable. */
+      WiFi.disconnect();
       wifi_index = (wifi_index + 1U) % WIFI_COUNT;
       WIFI_SSID = WIFI_LIST[wifi_index].ssid;
       WIFI_PASSWORD = WIFI_LIST[wifi_index].password;
@@ -300,7 +304,11 @@ void setup()
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
   WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
+  /* Auto-reconnect is deliberately disabled: the driver's background
+   * re-connect fights the manual begin/fallback logic in serviceNetwork()
+   * and causes "wifi:sta is connecting, cannot set config". Connection,
+   * timeouts and SSID fallback are all handled manually in serviceNetwork(). */
+  WiFi.setAutoReconnect(false);
   WiFi.persistent(false);
 
   Serial.println();

@@ -54,4 +54,4 @@ Chat request:
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8765/api/chat -ContentType "application/json" -Body '{"message":"现在几点？"}'
 ```
 
-`/api/chat` calls DeepSeek and returns pinyin. Voice/STT is disabled; use the ESP32/VOFA `ai:` text command instead. Authentication is intentionally not implemented yet.
+`/api/chat` calls DeepSeek and returns pinyin. Voice/STT is disabled; use the ESP32/VOFA `ai:` text command instead. The service keeps the latest 10 conversation turns in memory; omit `session_id` to use the default VOFA conversation, or provide a stable `session_id` for a separate conversation. Restarting the service clears the history. Authentication is intentionally not implemented yet.

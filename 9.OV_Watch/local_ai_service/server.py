@@ -4,6 +4,7 @@ import cgi
 import json
 import os
 import tempfile
+import threading
 from datetime import datetime
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -39,6 +40,9 @@ SYSTEM_PROMPT = os.environ.get(
 )
 # Keep the wire payload below the STM32 256-byte receive line limit.
 MAX_WIRE_PINYIN_LENGTH = int(os.environ.get("OVWATCH_MAX_PINYIN_LENGTH", "230"))
+MAX_HISTORY_TURNS = int(os.environ.get("OVWATCH_MAX_HISTORY_TURNS", "10"))
+chat_histories = {}
+chat_history_lock = threading.Lock()
 
 
 def json_bytes(payload):
@@ -51,6 +55,9 @@ def handle_stt(audio_path):
 
 def handle_chat(body):
     message = body.get("message", "") if isinstance(body, dict) else ""
+    session_id = body.get("session_id", "default") if isinstance(body, dict) else "default"
+    if not isinstance(session_id, str) or not session_id.strip():
+        session_id = "default"
     if not isinstance(message, str) or not message.strip():
         raise ValueError("message must be a non-empty string")
     if not DEEPSEEK_API_KEY:
@@ -64,12 +71,14 @@ def handle_chat(body):
         "当用户询问现在时间、日期或星期时，请直接依据这个时间回答，不要说无法获取。"
         % current_time
     )
+    with chat_history_lock:
+        history = list(chat_histories.get(session_id.strip(), []))
+    messages = [{"role": "system", "content": system_prompt}] + history
+    messages.append({"role": "user", "content": message.strip()})
     payload = json.dumps({
         "model": DEEPSEEK_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": message.strip()},
-        ],
+        "messages": messages,
+        "user": session_id.strip(),
         "temperature": 0.7,
         "max_tokens": 600,
     }).encode("utf-8")
@@ -98,6 +107,13 @@ def handle_chat(body):
     if lazy_pinyin is None:
         raise RuntimeError("pypinyin is not installed; run: python -m pip install pypinyin")
     pinyin = " ".join(lazy_pinyin(reply))
+    with chat_history_lock:
+        turns = chat_histories.setdefault(session_id.strip(), [])
+        turns.extend([
+            {"role": "user", "content": message.strip()},
+            {"role": "assistant", "content": reply},
+        ])
+        del turns[:-MAX_HISTORY_TURNS * 2]
     if len(pinyin) > MAX_WIRE_PINYIN_LENGTH:
         pinyin = pinyin[:MAX_WIRE_PINYIN_LENGTH].rstrip()
     return {
