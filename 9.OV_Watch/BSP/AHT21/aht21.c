@@ -256,7 +256,10 @@ uint8_t AHT21_Read(int16_t *temperature_x10, uint16_t *humidity_x10)
     for(i = 0; i < 7U; i++) data[i] = aht21_read_byte(i < 6U ? 1U : 0U);
     aht21_stop();
 
-    if((data[0] & 0x80U) != 0U || aht21_crc8(data, 6U) != data[6]) return 1U;
+    if((data[0] & 0x80U) != 0U || aht21_crc8(data, 6U) != data[6]) {
+        aht21_ready = 0U;
+        return 1U;
+    }
 
     humidity_raw = ((uint32_t)data[1] << 12) | ((uint32_t)data[2] << 4) | ((uint32_t)data[3] >> 4);
     temperature_raw = ((uint32_t)(data[3] & 0x0FU) << 16) | ((uint32_t)data[4] << 8) | data[5];

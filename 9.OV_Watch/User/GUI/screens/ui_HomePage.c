@@ -8,6 +8,8 @@
 lv_obj_t * ui_HomePage = NULL;
 
 static lv_obj_t * ui_AppsPage = NULL;
+static lv_obj_t * ui_EnvironmentPage = NULL;
+static lv_obj_t * ui_FlashlightPage = NULL;
 static lv_obj_t * ui_AIPage = NULL;
 static lv_obj_t * ui_CalcPage = NULL;
 static lv_obj_t * ui_StopwatchPage = NULL;
@@ -34,15 +36,36 @@ static lv_obj_t * ui_connection_label = NULL;
 static lv_obj_t * ui_status_label = NULL;
 static lv_obj_t * ui_temperature_label = NULL;
 static lv_obj_t * ui_humidity_label = NULL;
-static lv_obj_t * ui_app_status_label = NULL;
+static lv_obj_t * ui_environment_temperature = NULL;
+static lv_obj_t * ui_environment_humidity = NULL;
+static lv_obj_t * ui_environment_comfort = NULL;
+static lv_obj_t * ui_environment_humidity_advice = NULL;
+static lv_obj_t * ui_environment_range = NULL;
+static lv_obj_t * ui_environment_status = NULL;
+static lv_obj_t * ui_environment_humidity_bar = NULL;
+static bool ui_environment_has_sample = false;
+static int16_t ui_environment_min_temperature = 0;
+static int16_t ui_environment_max_temperature = 0;
+static uint16_t ui_environment_min_humidity = 0U;
+static uint16_t ui_environment_max_humidity = 0U;
 static lv_obj_t * ui_ai_listening_label = NULL;
 static lv_obj_t * ui_ai_text_label = NULL;
 static lv_obj_t * ui_timeout_value = NULL;
 static lv_obj_t * ui_brightness_slider = NULL;
 static lv_obj_t * ui_brightness_value = NULL;
 static lv_obj_t * ui_quick_panel = NULL;
+static lv_obj_t * ui_quick_wifi_button = NULL;
+static lv_obj_t * ui_quick_bluetooth_button = NULL;
 static lv_obj_t * ui_quick_brightness_slider = NULL;
 static lv_obj_t * ui_quick_brightness_value = NULL;
+
+static void ui_set_quick_toggle_state(lv_obj_t * button, bool enabled)
+{
+    if(!button) return;
+    lv_obj_set_style_bg_color(button, enabled ? lv_color_hex(0x245070) : lv_color_hex(0x14264A), LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, lv_color_hex(0x385B7A), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0x245070), LV_PART_MAIN | LV_STATE_PRESSED);
+}
 
 static lv_obj_t * ui_calc_display = NULL;
 static lv_obj_t * ui_stopwatch_display = NULL;
@@ -79,12 +102,15 @@ static uint8_t ui_date_weekday = 4U; /* Thursday */
 static uint32_t ui_clock_base_tick = 0;
 static uint32_t ui_time_edit_seconds = 9U * 3600U + 41U * 60U;
 static uint8_t ui_timer_mode = 0;
+static uint8_t ui_flashlight_previous_brightness = 0U;
 static bool ui_stopwatch_running = false;
 static bool ui_countdown_running = false;
 static bool ui_alarm_enabled = false;
 static bool ui_alarm_ringing = false;
 static bool ui_time_editing = false;
 static bool ui_quick_panel_visible = false;
+static bool ui_wifi_enabled = true;
+static bool ui_bluetooth_enabled = true;
 static bool ui_screen_off = false;
 
 static char ui_calc_value[24] = "0";
@@ -105,6 +131,9 @@ static void ui_time_back_event(lv_event_t * event);
 static void ui_calendar_nav_event(lv_event_t * event);
 static void ui_timeout_adjust_event(lv_event_t * event);
 static void ui_reaction_app_event(lv_event_t * event);
+static void ui_environment_back_event(lv_event_t * event);
+static void ui_flashlight_app_event(lv_event_t * event);
+static void ui_flashlight_back_event(lv_event_t * event);
 static void ui_reaction_target_event(lv_event_t * event);
 static void ui_reaction_start_event(lv_event_t * event);
 static void ui_reaction_back_event(lv_event_t * event);
@@ -331,6 +360,17 @@ void ui_handle_key_confirm(void)
     ui_screen_timeout_refresh();
     if(lv_scr_act() == ui_ReactionPage) {
         if(!ui_reaction_active) ui_reaction_show_endless_menu();
+        return;
+    }
+    if(lv_scr_act() == ui_FlashlightPage) {
+        LCD_Set_Light(ui_flashlight_previous_brightness);
+        lv_scr_load(ui_AppsPage);
+        return;
+    }
+    if(lv_scr_act() == ui_EnvironmentPage) {
+        ui_environment_has_sample = false;
+        if(ui_environment_range) lv_label_set_text(ui_environment_range, "RANGE RESET / WAITING");
+        if(ui_environment_status) lv_label_set_text(ui_environment_status, "KEY RESET COMPLETE");
         return;
     }
     if(lv_scr_act() == ui_StopwatchPage) {
@@ -595,7 +635,28 @@ static void ui_reaction_app_event(lv_event_t * event)
 static void ui_environment_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-    lv_label_set_text(ui_app_status_label, "ENV / AHT21 PLACEHOLDER");
+    lv_scr_load(ui_EnvironmentPage);
+}
+
+static void ui_environment_back_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    lv_scr_load(ui_AppsPage);
+}
+
+static void ui_flashlight_app_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    ui_flashlight_previous_brightness = LCD_Get_Light();
+    LCD_Set_Light(100U);
+    lv_scr_load(ui_FlashlightPage);
+}
+
+static void ui_flashlight_back_event(lv_event_t * event)
+{
+    if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    LCD_Set_Light(ui_flashlight_previous_brightness);
+    lv_scr_load(ui_AppsPage);
 }
 
 static void ui_ai_app_event(lv_event_t * event)
@@ -1155,20 +1216,25 @@ static void ui_quick_lock_event(lv_event_t * event)
 static void ui_quick_wifi_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-
+    ui_wifi_enabled = !ui_wifi_enabled;
+    ui_set_quick_toggle_state(ui_quick_wifi_button, ui_wifi_enabled);
 }
+
+
 
 static void ui_quick_bluetooth_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-
+    ui_bluetooth_enabled = !ui_bluetooth_enabled;
+    ui_set_quick_toggle_state(ui_quick_bluetooth_button, ui_bluetooth_enabled);
 }
 
 static void ui_quick_power_event(lv_event_t * event)
 {
     if(lv_event_get_code(event) != LV_EVENT_CLICKED) return;
-
+    NVIC_SystemReset();
 }
+
 
 void ui_handle_swipe(lv_dir_t direction)
 {
@@ -1230,7 +1296,6 @@ void ui_HomePage_screen_init(void)
     ui_HomePage = lv_obj_create(NULL);
     ui_style_screen(ui_HomePage);
     ui_create_anime_background(ui_HomePage, &watch_home);
-
     title = ui_create_label(ui_HomePage, "OV // WATCH", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 16, 14);
     ui_connection_label = ui_create_label(ui_HomePage, "LIVE", lv_color_hex(0x76E8D0), &lv_font_montserrat_14);
@@ -1301,6 +1366,68 @@ void ui_HomePage_screen_init(void)
         lv_obj_set_pos(item, 6, 280);
         item = ui_create_app_row(list, "SET", &lv_font_montserrat_14, lv_color_hex(0x8CECF5), "SETTINGS", ui_settings_event);
         lv_obj_set_pos(item, 6, 336);
+        item = ui_create_app_row(list, "LAMP", &lv_font_montserrat_14, lv_color_hex(0xFFD27A), "FLASHLIGHT", ui_flashlight_app_event);
+        lv_obj_set_pos(item, 6, 392);
+    }
+
+    ui_FlashlightPage = lv_obj_create(NULL);
+    lv_obj_set_size(ui_FlashlightPage, 240, 280);
+    lv_obj_set_style_bg_color(ui_FlashlightPage, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(ui_FlashlightPage, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_clear_flag(ui_FlashlightPage, LV_OBJ_FLAG_SCROLLABLE);
+    {
+        lv_obj_t * back = lv_btn_create(ui_FlashlightPage);
+        lv_obj_set_size(back, 54, 40);
+        lv_obj_set_pos(back, 93, 220);
+        lv_obj_set_style_bg_color(back, lv_color_hex(0x202020), LV_PART_MAIN);
+        lv_obj_add_event_cb(back, ui_flashlight_back_event, LV_EVENT_CLICKED, NULL);
+        {
+            lv_obj_t * text = lv_label_create(back);
+            lv_label_set_text(text, "EXIT");
+            lv_obj_set_style_text_color(text, lv_color_white(), LV_PART_MAIN);
+            lv_obj_center(text);
+        }
+    }
+
+    ui_EnvironmentPage = lv_obj_create(NULL);
+    ui_style_screen(ui_EnvironmentPage);
+    {
+        lv_obj_t * back = ui_create_action_button(ui_EnvironmentPage, "<", 34, 28, ui_environment_back_event);
+        lv_obj_t * humidity_title;
+        lv_obj_t * range_title;
+        lv_obj_set_pos(back, 14, 14);
+        title = ui_create_label(ui_EnvironmentPage, "ENVIRONMENT", lv_color_hex(0xFFF6EF), &lv_font_montserrat_18);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+        ui_environment_status = ui_create_label(ui_EnvironmentPage, "AHT21 / READING...", lv_color_hex(0x77E8EF), &lv_font_montserrat_14);
+        lv_obj_align(ui_environment_status, LV_ALIGN_TOP_MID, 0, 50);
+
+        ui_environment_temperature = ui_create_label(ui_EnvironmentPage, "--.- C", lv_color_hex(0xFFF6EF), &lv_font_montserrat_32);
+        lv_obj_align(ui_environment_temperature, LV_ALIGN_TOP_MID, 0, 76);
+        ui_environment_comfort = ui_create_label(ui_EnvironmentPage, "TEMP: WAITING", lv_color_hex(0xFFD27A), &lv_font_montserrat_14);
+        lv_obj_align(ui_environment_comfort, LV_ALIGN_TOP_MID, 0, 116);
+        ui_environment_humidity_advice = ui_create_label(ui_EnvironmentPage, "HUM: WAITING", lv_color_hex(0xFFD27A), &lv_font_montserrat_14);
+        lv_obj_align(ui_environment_humidity_advice, LV_ALIGN_TOP_MID, 0, 134);
+
+        humidity_title = ui_create_label(ui_EnvironmentPage, "HUMIDITY", lv_color_hex(0x8CECF5), &lv_font_montserrat_14);
+        lv_obj_set_pos(humidity_title, 18, 163);
+        ui_environment_humidity = ui_create_label(ui_EnvironmentPage, "--.- %", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
+        lv_obj_align(ui_environment_humidity, LV_ALIGN_TOP_RIGHT, -18, 163);
+        ui_environment_humidity_bar = lv_bar_create(ui_EnvironmentPage);
+        lv_obj_set_pos(ui_environment_humidity_bar, 18, 187);
+        lv_obj_set_size(ui_environment_humidity_bar, 204, 12);
+        lv_bar_set_range(ui_environment_humidity_bar, 0, 100);
+        lv_bar_set_value(ui_environment_humidity_bar, 0, LV_ANIM_OFF);
+        lv_obj_set_style_bg_color(ui_environment_humidity_bar, lv_color_hex(0x14264A), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(ui_environment_humidity_bar, lv_color_hex(0x62D7E9), LV_PART_INDICATOR);
+        lv_obj_set_style_radius(ui_environment_humidity_bar, 4, LV_PART_MAIN);
+        lv_obj_set_style_radius(ui_environment_humidity_bar, 4, LV_PART_INDICATOR);
+
+        range_title = ui_create_label(ui_EnvironmentPage, "SESSION RANGE", lv_color_hex(0xD38EBF), &lv_font_montserrat_14);
+        lv_obj_set_pos(range_title, 18, 215);
+        ui_environment_range = ui_create_label(ui_EnvironmentPage, "WAITING FOR DATA", lv_color_hex(0xFFF6EF), &lv_font_montserrat_14);
+        lv_obj_set_width(ui_environment_range, 204);
+        lv_obj_set_style_text_align(ui_environment_range, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+        lv_obj_set_pos(ui_environment_range, 18, 239);
     }
 
     ui_CalcPage = lv_obj_create(NULL);
@@ -1501,7 +1628,11 @@ void ui_HomePage_screen_init(void)
     lv_obj_set_style_pad_all(ui_quick_panel, 0, LV_PART_MAIN);
     {
         lv_obj_t * wifi = ui_create_quick_toggle(ui_quick_panel, LV_SYMBOL_WIFI, "WIFI", ui_quick_wifi_event);
+        ui_quick_wifi_button = wifi;
+        ui_set_quick_toggle_state(wifi, true);
         lv_obj_t * bluetooth = ui_create_quick_toggle(ui_quick_panel, LV_SYMBOL_BLUETOOTH, "BLE", ui_quick_bluetooth_event);
+        ui_quick_bluetooth_button = bluetooth;
+        ui_set_quick_toggle_state(bluetooth, true);
         lv_obj_t * screen = ui_create_quick_toggle(ui_quick_panel, LV_SYMBOL_EYE_CLOSE, "OFF", ui_quick_lock_event);
         lv_obj_t * power = ui_create_quick_toggle(ui_quick_panel, LV_SYMBOL_POWER, "PWR", ui_quick_power_event);
         lv_obj_set_pos(wifi, 12, 12);
@@ -1521,6 +1652,7 @@ void ui_HomePage_screen_init(void)
         lv_obj_set_pos(ui_quick_brightness_value, 12, 136);
         lv_label_set_text_fmt(ui_quick_brightness_value, "%d%%", (int)LCD_Get_Light());
     }
+
 }
 
 void ui_set_ai_text(const char * text)
@@ -1530,8 +1662,76 @@ void ui_set_ai_text(const char * text)
 
 void ui_set_sensor_values(const char * temperature, const char * humidity)
 {
+    int temperature_whole;
+    int temperature_fraction;
+    unsigned int humidity_whole;
+    unsigned int humidity_fraction;
+    int16_t temperature_x10;
+    uint16_t humidity_x10;
+    const char * comfort;
+    const char * humidity_advice;
+    lv_color_t comfort_color;
+    lv_color_t humidity_advice_color;
+
     if(ui_temperature_label && temperature) lv_label_set_text(ui_temperature_label, temperature);
     if(ui_humidity_label && humidity) lv_label_set_text(ui_humidity_label, humidity);
+    if(ui_environment_temperature && temperature) lv_label_set_text(ui_environment_temperature, temperature);
+    if(ui_environment_humidity && humidity) lv_label_set_text(ui_environment_humidity, humidity);
+    if(!temperature || !humidity ||
+       sscanf(temperature, "%d.%d C", &temperature_whole, &temperature_fraction) != 2 ||
+       sscanf(humidity, "%u.%u %%", &humidity_whole, &humidity_fraction) != 2) return;
+
+    temperature_x10 = (int16_t)(temperature_whole * 10 +
+                      (temperature_whole < 0 ? -temperature_fraction : temperature_fraction));
+    humidity_x10 = (uint16_t)(humidity_whole * 10U + humidity_fraction);
+    if(!ui_environment_has_sample) {
+        ui_environment_min_temperature = temperature_x10;
+        ui_environment_max_temperature = temperature_x10;
+        ui_environment_min_humidity = humidity_x10;
+        ui_environment_max_humidity = humidity_x10;
+        ui_environment_has_sample = true;
+    } else {
+        if(temperature_x10 < ui_environment_min_temperature) ui_environment_min_temperature = temperature_x10;
+        if(temperature_x10 > ui_environment_max_temperature) ui_environment_max_temperature = temperature_x10;
+        if(humidity_x10 < ui_environment_min_humidity) ui_environment_min_humidity = humidity_x10;
+        if(humidity_x10 > ui_environment_max_humidity) ui_environment_max_humidity = humidity_x10;
+    }
+
+    if(temperature_x10 < 180) {
+        comfort = "TEMP: COLD"; comfort_color = lv_color_hex(0x8CECF5);
+    } else if(temperature_x10 > 350) {
+        comfort = "TEMP: HOT"; comfort_color = lv_color_hex(0xFF8B7A);
+    } else {
+        comfort = "TEMP: COMFORTABLE"; comfort_color = lv_color_hex(0x76E8D0);
+    }
+    if(humidity_x10 < 300U) {
+        humidity_advice = "HUM: DRY / ADD HUMIDITY"; humidity_advice_color = lv_color_hex(0xFFD27A);
+    } else if(humidity_x10 < 400U) {
+        humidity_advice = "HUM: A LITTLE DRY"; humidity_advice_color = lv_color_hex(0xFFD27A);
+    } else if(humidity_x10 > 700U) {
+        humidity_advice = "HUM: HIGH / VENTILATE"; humidity_advice_color = lv_color_hex(0x77E8EF);
+    } else {
+        humidity_advice = "HUM: COMFORTABLE"; humidity_advice_color = lv_color_hex(0x76E8D0);
+    }
+    if(ui_environment_comfort) {
+        lv_label_set_text(ui_environment_comfort, comfort);
+        lv_obj_set_style_text_color(ui_environment_comfort, comfort_color, LV_PART_MAIN);
+    }
+    if(ui_environment_humidity_advice) {
+        lv_label_set_text(ui_environment_humidity_advice, humidity_advice);
+        lv_obj_set_style_text_color(ui_environment_humidity_advice, humidity_advice_color, LV_PART_MAIN);
+    }
+    if(ui_environment_status) lv_label_set_text(ui_environment_status, "AHT21 / LIVE");
+    if(ui_environment_humidity_bar) {
+        lv_bar_set_value(ui_environment_humidity_bar, humidity_x10 > 1000U ? 100 : (int32_t)(humidity_x10 / 10U), LV_ANIM_ON);
+    }
+    if(ui_environment_range) {
+        lv_label_set_text_fmt(ui_environment_range, "TEMP %d.%d / %d.%d C\nHUM  %u.%u / %u.%u %%",
+                              (int)(ui_environment_min_temperature / 10), abs(ui_environment_min_temperature % 10),
+                              (int)(ui_environment_max_temperature / 10), abs(ui_environment_max_temperature % 10),
+                              (unsigned int)(ui_environment_min_humidity / 10U), (unsigned int)(ui_environment_min_humidity % 10U),
+                              (unsigned int)(ui_environment_max_humidity / 10U), (unsigned int)(ui_environment_max_humidity % 10U));
+    }
 }
 
 void ui_set_connection_state(const char * state)
@@ -1559,11 +1759,17 @@ void ui_HomePage_screen_destroy(void)
     if(ui_ReactionPage) lv_obj_del(ui_ReactionPage);
     if(ui_NoticePage) lv_obj_del(ui_NoticePage);
     if(ui_AIPage) lv_obj_del(ui_AIPage);
+    if(ui_FlashlightPage) lv_obj_del(ui_FlashlightPage);
+    if(ui_EnvironmentPage) lv_obj_del(ui_EnvironmentPage);
     if(ui_AppsPage) lv_obj_del(ui_AppsPage);
     if(ui_HomePage) lv_obj_del(ui_HomePage);
 
     ui_HomePage = NULL;
     ui_AppsPage = NULL;
+    ui_EnvironmentPage = NULL;
+    ui_quick_wifi_button = NULL;
+    ui_quick_bluetooth_button = NULL;
+    ui_FlashlightPage = NULL;
     ui_AIPage = NULL;
     ui_CalcPage = NULL;
     ui_ReactionPage = NULL;
@@ -1577,7 +1783,14 @@ void ui_HomePage_screen_destroy(void)
     ui_status_label = NULL;
     ui_temperature_label = NULL;
     ui_humidity_label = NULL;
-    ui_app_status_label = NULL;
+    ui_environment_temperature = NULL;
+    ui_environment_humidity = NULL;
+    ui_environment_comfort = NULL;
+    ui_environment_humidity_advice = NULL;
+    ui_environment_range = NULL;
+    ui_environment_status = NULL;
+    ui_environment_humidity_bar = NULL;
+    ui_environment_has_sample = false;
     ui_ai_listening_label = NULL;
     ui_ai_text_label = NULL;
     ui_timeout_value = NULL;

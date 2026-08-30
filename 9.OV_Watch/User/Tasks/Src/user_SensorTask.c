@@ -20,9 +20,12 @@ void SensorTask(void *argument)
     for(;;) {
         if(AHT21_Read(&temperature_x10, &humidity_x10) == 0U) {
             taskENTER_CRITICAL();
-            snprintf(sensor_temperature, sizeof(sensor_temperature), "%d.%d C", 
-                     (int)(temperature_x10 / 10),
-                     (int)(temperature_x10 < 0 ? -(temperature_x10 % 10) : temperature_x10 % 10));
+            int16_t absolute_temperature = temperature_x10 < 0 ? (int16_t)-temperature_x10 : temperature_x10;
+            snprintf(sensor_temperature, sizeof(sensor_temperature), "%s%d.%d C",
+                     temperature_x10 < 0 ? "-" : "",
+                     (int)(absolute_temperature / 10),
+                     (int)(absolute_temperature % 10));
+            if(humidity_x10 > 1000U) humidity_x10 = 1000U;
             snprintf(sensor_humidity, sizeof(sensor_humidity), "%u.%u %%",
                      (unsigned int)(humidity_x10 / 10U),
                      (unsigned int)(humidity_x10 % 10U));

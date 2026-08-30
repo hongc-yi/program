@@ -37,6 +37,8 @@ DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 SYSTEM_PROMPT = os.environ.get(
     "OVWATCH_SYSTEM_PROMPT", "你是 OV-Watch 手表的本地 AI 助手，请用简洁、准确的中文回答。"
 )
+# Keep the wire payload below the STM32 256-byte receive line limit.
+MAX_WIRE_PINYIN_LENGTH = int(os.environ.get("OVWATCH_MAX_PINYIN_LENGTH", "230"))
 
 
 def json_bytes(payload):
@@ -95,10 +97,13 @@ def handle_chat(body):
     reply = choices[0]["message"]["content"].strip()
     if lazy_pinyin is None:
         raise RuntimeError("pypinyin is not installed; run: python -m pip install pypinyin")
+    pinyin = " ".join(lazy_pinyin(reply))
+    if len(pinyin) > MAX_WIRE_PINYIN_LENGTH:
+        pinyin = pinyin[:MAX_WIRE_PINYIN_LENGTH].rstrip()
     return {
         "ok": True,
         "reply": reply,
-        "pinyin": " ".join(lazy_pinyin(reply)),
+        "pinyin": pinyin,
         "engine": DEEPSEEK_MODEL,
     }
 

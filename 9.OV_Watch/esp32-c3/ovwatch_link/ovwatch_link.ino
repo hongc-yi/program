@@ -25,8 +25,19 @@
 #define AI_SERVER_URL          "http://192.168.38.76:8765/api/chat"
 #define CONSOLE_LINE_SIZE      160  
 
-static const char WIFI_SSID[] = "tytxdy";
-static const char WIFI_PASSWORD[] = "lty20120712";
+struct WifiCredential {
+  const char *ssid;
+  const char *password;
+};
+
+static const WifiCredential WIFI_LIST[] = {
+  {"tytxdy", "lty20120712"},
+  {"ChinaNet-恰恰喽", "72025862."}
+};
+static const size_t WIFI_COUNT = sizeof(WIFI_LIST) / sizeof(WIFI_LIST[0]);
+static size_t wifi_index = 0U;
+static const char *WIFI_SSID = WIFI_LIST[0].ssid;
+static const char *WIFI_PASSWORD = WIFI_LIST[0].password;
 static const char NTP_SERVER_1[] = "ntp.aliyun.com";
 static const char NTP_SERVER_2[] = "pool.ntp.org";
 static const long UTC_OFFSET_SECONDS = 8L * 3600L;
@@ -65,6 +76,48 @@ static void stmSendLine(const char *line)
   Serial.println(line);
 }
 
+static String jsonEscape(const String &value)
+{
+  String escaped;
+  escaped.reserve(value.length() + 8);
+  for(size_t i = 0; i < value.length(); ++i) {
+    const char c = value[i];
+    switch(c) {
+      case '\\': escaped += "\\\\"; break;
+      case '\"': escaped += "\\\""; break;
+      case '\n': escaped += "\\n"; break;
+      case '\r': escaped += "\\r"; break;
+      case '\t': escaped += "\\t"; break;
+      default:
+        if((unsigned char)c < 0x20) escaped += ' ';
+        else escaped += c;
+        break;
+    }
+  }
+  return escaped;
+}
+
+static String jsonUnescape(const String &value)
+{
+  String unescaped;
+  unescaped.reserve(value.length());
+  bool escaped = false;
+  for(size_t i = 0; i < value.length(); ++i) {
+    const char c = value[i];
+    if(escaped) {
+      if(c == 'n' || c == 'r' || c == 't') unescaped += ' ';
+      else unescaped += c;
+      escaped = false;
+    } else if(c == '\\') {
+      escaped = true;
+    } else {
+      unescaped += c;
+    }
+  }
+  if(escaped) unescaped += '\\';
+  return unescaped;
+}
+
 static void handleAiCommand(const String &cmd)
 {
   if(WiFi.status() != WL_CONNECTED) { Serial.println("[AI] WiFi not connected"); return; }
@@ -74,8 +127,7 @@ static void handleAiCommand(const String &cmd)
   HTTPClient http;
   http.begin(AI_SERVER_URL);
   http.addHeader("Content-Type", "application/json");
-  prompt.replace("\\\"", "'");
-  String body = "{\"message\":\"" + prompt + "\"}";
+  String body = "{\"message\":\"" + jsonEscape(prompt) + "\"}";
   int code = http.POST(body);
   if(code <= 0) { Serial.printf("[AI] HTTP error: %d\n", code); http.end(); return; }
   String response = http.getString();
@@ -87,9 +139,7 @@ static void handleAiCommand(const String &cmd)
   start++;
   int end = response.indexOf('"', start);
   if(end <= start) { http.end(); return; }
-  String pinyin = response.substring(start, end);
-  pinyin.replace("\\n", " ");
-  pinyin.replace("\\r", " ");
+  String pinyin = jsonUnescape(response.substring(start, end));
   if(pinyin.length() >= CONSOLE_LINE_SIZE - 10) pinyin = pinyin.substring(0, CONSOLE_LINE_SIZE - 11);
   String line = "AI_TEXT," + pinyin;
   stmSendLine(line.c_str());
@@ -147,6 +197,9 @@ static void serviceNetwork(void)
     if(wifiConnectStartedMs != 0 && now - wifiConnectStartedMs >= WIFI_CONNECT_TIMEOUT_MS) {
       Serial.println("[WiFi] 连接超时，重置后重试");
       WiFi.disconnect(true, true);
+      wifi_index = (wifi_index + 1U) % WIFI_COUNT;
+      WIFI_SSID = WIFI_LIST[wifi_index].ssid;
+      WIFI_PASSWORD = WIFI_LIST[wifi_index].password;
       wifiConnectStartedMs = 0;
       lastWifiAttemptMs = now;
       return;
